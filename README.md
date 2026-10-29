@@ -69,15 +69,15 @@ Deflake runs one loop.
 
 ![Sign in](screenshots/screenshot01.png)
 
-![Completed scan, flake cards](screenshots/screenshot02.png)  ![Completed scan, flake table](screenshots/screenshot03.png)
+<img src="screenshots/screenshot02.png" alt="Completed scan, flake cards" width="48%">&nbsp;&nbsp;<img src="screenshots/screenshot03.png" alt="Completed scan, flake table" width="48%">
 
-![Verified patch](screenshots/screenshot04.png)  ![Guardrail rejected a patch](screenshots/screenshot05.png)
+<img src="screenshots/screenshot04.png" alt="Verified patch" width="48%">&nbsp;&nbsp;<img src="screenshots/screenshot05.png" alt="Guardrail rejected a patch" width="48%">
 
-![Failing and passing evidence](screenshots/screenshot06.png)  ![Upstream references](screenshots/screenshot07.png)
+<img src="screenshots/screenshot06.png" alt="Failing and passing evidence" width="48%">&nbsp;&nbsp;<img src="screenshots/screenshot07.png" alt="Upstream references" width="48%">
 
-![Escalations](screenshots/screenshot08.png)  ![Repositories](screenshots/screenshot09.png)
+<img src="screenshots/screenshot08.png" alt="Escalations" width="48%">&nbsp;&nbsp;<img src="screenshots/screenshot09.png" alt="Repositories" width="48%">
 
-![Overview](screenshots/screenshot10.png)
+<img src="screenshots/screenshot10.png" alt="Overview" width="48%">
 
 ## Setup and run
 
