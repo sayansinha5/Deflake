@@ -65,6 +65,20 @@ Deflake runs one loop.
 4. **Prove.** Rerun the fixed test many times, then the rest of the suite. Zero failures is the bar.
 5. **Route.** A strong proof can open a pull request. A weak one, or a case with no safe patch, goes to a person with the runs, the diagnosis, and the patch attempts.
 
+## Project Screenshots
+
+![Sign in](screenshots/screenshot01.png)
+
+![Completed scan, flake cards](screenshots/screenshot02.png)  ![Completed scan, flake table](screenshots/screenshot03.png)
+
+![Verified patch](screenshots/screenshot04.png)  ![Guardrail rejected a patch](screenshots/screenshot05.png)
+
+![Failing and passing evidence](screenshots/screenshot06.png)  ![Upstream references](screenshots/screenshot07.png)
+
+![Escalations](screenshots/screenshot08.png)  ![Repositories](screenshots/screenshot09.png)
+
+![Overview](screenshots/screenshot10.png)
+
 ## Setup and run
 
 Clone the repo
@@ -140,20 +154,6 @@ Sign in with the demo member:
 **Stop backend:** Go to backend terminal, just press `Ctrl + C`. Or if running on `-d` then run command `docker compose down`
 
 The database volume is kept.
-
-## Screenshots
-
-![Sign in](screenshots/screenshot01.png)
-
-![Completed scan, flake cards](screenshots/screenshot02.png)  ![Completed scan, flake table](screenshots/screenshot03.png)
-
-![Verified patch](screenshots/screenshot04.png)  ![Guardrail rejected a patch](screenshots/screenshot05.png)
-
-![Failing and passing evidence](screenshots/screenshot06.png)  ![Upstream references](screenshots/screenshot07.png)
-
-![Escalations](screenshots/screenshot08.png)  ![Repositories](screenshots/screenshot09.png)
-
-![Overview](screenshots/screenshot10.png)
 
 ## Nebius Token Factory + NVIDIA Nemotron
 
