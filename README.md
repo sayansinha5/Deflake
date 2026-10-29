@@ -28,29 +28,25 @@ A scan has to sort a failure, explain it, write a fix, and decide whether a pers
   Runs every model step. Classification, the patch, and the diagnosis are different jobs, and each one has to come back as an answer the pipeline can check. One account reaches every size of model the scan needs, so a cheap triage step and a careful root-cause step share the same path.
 
 
-- **NVIDIA Nemotron**
-
+- **NVIDIA Nemotron** \
   The model family those steps call. A fast model sorts each failure and writes the search query, because there are many of them and each answer is short. A balanced model writes the patch and the note for the expert, because the diff has to be small and valid. A reasoning model diagnoses the cause three times, and the samples have to agree before Deflake treats the cause as settled.
 
 
-- **Tavily**
-
+- **Tavily** \
   Looks outside the repository after a test is classified. A flake often matches an upstream bug report or a changelog, and that reference belongs next to the diagnosis. When the search finds nothing, or cannot be reached, the diagnosis still continues and the references tab says so.
 
 
-- **Toloka**
-
+- **Toloka** \
   Checks whether a written cause actually matches its patch. Reviewers look at the explanation and the change together. Their agreement is what sets the confidence bar for an automatic pull request. Until enough pairs have been reviewed, Deflake keeps the default bar and the calibration screen says so.
 
 
-- **Tendem**
-
+- **Tendem** \
   Takes a case when there is no safe patch, or when repeated runs do not prove the fix. The expert receives the runs, the diagnosis, and the patch attempts. When that handoff cannot be completed, Deflake keeps the case and the screen names who holds it.
 
 
-- **LangSmith**
-
+- **LangSmith** \
   Records each model call so a scan can be followed afterward. A call is tagged with the scan, the flake, the step, the model tier, and the prompt version.
+
 
 ## Let's understand by scenario
 
@@ -74,11 +70,25 @@ A green test is not proof. A patch can make a test pass while the bug stays.
 
 Deflake runs one loop.
 
-1. **Detect.** Rerun the suite many times in random order. A test that fails only sometimes is flaky. A test that fails every time is broken, and is left alone.
-2. **Diagnose.** Name the cause. When the flake depends on order, name the test that polluted the one that failed.
-3. **Fix.** Write a small patch. A sleep, a retry, a skip, or a weakened assertion is rejected, and the rejection stays visible.
-4. **Prove.** Rerun the fixed test many times, then the rest of the suite. Zero failures is the bar.
-5. **Route.** A strong proof can open a pull request. A weak one, or a case with no safe patch, goes to a person with the runs, the diagnosis, and the patch attempts.
+1. **Detect.** \
+  Rerun the suite many times in random order. A test that fails only sometimes is flaky. A test that fails every time is broken, and is left alone.
+
+
+2. **Diagnose.** \
+  Name the cause. When the flake depends on order, name the test that polluted the one that failed.
+
+
+3. **Fix.** \
+  Write a small patch. A sleep, a retry, a skip, or a weakened assertion is rejected, and the rejection stays visible.
+
+
+4. **Prove.** \
+  Rerun the fixed test many times, then the rest of the suite. Zero failures is the bar.
+
+
+5. **Route.** \
+  A strong proof can open a pull request. A weak one, or a case with no safe patch, goes to a person with the runs, the diagnosis, and the patch attempts.
+
 
 ## Project Screenshots
 
@@ -140,20 +150,18 @@ It will take sometime for the first time. Leave it open.
 
 Docker Compose starts a container named `Deflake` with three services:
 
-- **api**
-
-The backend api http://localhost:8000 to which the frontend communicates.
-
-
-- **runner**
-
-Runs the project's pytest suite. A scan copies one repository into a throwaway workspace, applies a patch only after it checks, runs the tests, and deletes that workspace.
+- **api** \
+  The backend api http://localhost:8000 to which the frontend communicates.
 
 
-- **mysql**
+- **runner** \
+  Runs the project's pytest suite. A scan copies one repository into a throwaway workspace, applies a patch only after it checks, runs the tests, and deletes that workspace.
 
-A persistent DB, that stores accounts, scans, flakes, patches, and the scan checkpoints.
 
+- **mysql** \
+  A persistent DB, that stores accounts, scans, flakes, patches, and the scan checkpoints.
+
+---
 
 Now, open the shell of the api service in Docker.
 
@@ -183,18 +191,18 @@ sh scripts/seed.sh
 
 ---
 
-**Stop frontend:**
+**Stop frontend:** \
+  Go to frontend terminal, just press `Ctrl + C`
 
-Go to frontend terminal, just press `Ctrl + C`
 
-
-**Stop backend:**
-
-Go to backend terminal, just press `Ctrl + C`. Or if running on `-d` then run command `docker compose down`
+**Stop backend:** \
+  Go to backend terminal, just press `Ctrl + C`. Or if running on `-d` then run command `docker compose down`
 
 
 The database volume is kept.
+
 ---
+
 
 ## Nebius Token Factory + NVIDIA Nemotron
 
