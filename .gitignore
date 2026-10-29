@@ -1,0 +1,73 @@
+# Environment files (only .env.example is committed)
+.env
+.env.*
+!.env.example
+*.env
+!*.env.example
+
+# Local data
+data/
+*.sqlite
+*.db
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Node
+node_modules/
+dist/
+.vite/
+npm-debug.log*
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/.eslintcache
+frontend/npm-debug.log*
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
+
+# Backend
+backend/.venv/
+backend/venv/
+backend/**/__pycache__/
+backend/.pytest_cache/
+backend/.ruff_cache/
+backend/.mypy_cache/
+backend/.coverage
+backend/coverage.xml
+backend/htmlcov/
+backend/data/
+backend/**/*.sqlite
+backend/**/*.db
+backend/.env
+backend/.env.*
+!backend/.env.example
+
+# Editors and OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Project notes and local docs
+docs/
+FEEDBACK.md
+GH_SUPPORT.md
+LEARNING.md
+NOOB_ROUND.md
+PROJECT_README.md
+PROJECT_SPECS.md

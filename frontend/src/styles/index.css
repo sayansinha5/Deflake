@@ -1,0 +1,84 @@
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
+@import "@fontsource/inter/700.css";
+@import "@fontsource/rubik/400.css";
+@import "@fontsource/rubik/500.css";
+@import "@fontsource/rubik/600.css";
+@import "@fontsource/rubik/700.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  accent-color: #6c78d7;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+  font-family: "Rubik", sans-serif;
+}
+
+body {
+  margin: 0;
+  background: #ffffff;
+  color: #1c1c4a;
+  font-family: "Rubik", sans-serif;
+  font-size: 14px;
+  line-height: 20px;
+  font-variant-numeric: tabular-nums;
+}
+
+h1, h2 {
+  font-family: "Inter", sans-serif;
+}
+
+a {
+  color: #323d93;
+  text-decoration: underline;
+  text-decoration-style: dashed;
+  text-decoration-color: #323d9340;
+  text-underline-offset: 4px;
+}
+
+a:hover {
+  color: #3f4cb8;
+  text-decoration-color: #323d9380;
+  background-color: #3f4cb808;
+}
+
+::selection {
+  background: #d1e8fd;
+  color: #1c1c4a;
+}
+
+:focus,
+:focus-visible {
+  outline: none;
+}
+
+input:-webkit-autofill {
+  -webkit-text-fill-color: #1c1c4a;
+  box-shadow: 0 0 0 1000px #ffffff inset;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #c9c6d6 transparent;
+}
+
+
+.inter-font {
+  font-family: "Inter", sans-serif;
+}
+
+.rubik-font {
+  font-family: "Rubik", sans-serif;
+}
+
+
+

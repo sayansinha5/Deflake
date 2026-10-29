@@ -1,0 +1,9 @@
+# Repositories Deflake is allowed to scan. Paths are relative to this file.
+repos:
+  - id: flaky-shop
+    name: flaky-shop
+    description: Demo online shop with seeded flaky tests (order, async, time, randomness, env, hash order).
+    path: flaky-shop
+    editable_paths:
+      - "shop/**"
+      - "tests/**"

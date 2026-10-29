@@ -1,0 +1,10 @@
+[project]
+name = "flaky-shop"
+version = "0.1.0"
+description = "Demo shop with deliberately seeded flaky tests, used to demonstrate Deflake"
+requires-python = ">=3.12"
+license = "Apache-2.0"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

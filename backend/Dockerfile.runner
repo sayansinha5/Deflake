@@ -1,0 +1,24 @@
+FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY runner/requirements.txt /tmp/runner-requirements.txt
+RUN pip install -r /tmp/runner-requirements.txt \
+    && rm /tmp/runner-requirements.txt
+COPY runner/plugins/deflake_order.py /usr/local/lib/python3.12/site-packages/deflake_order.py
+
+RUN useradd --create-home --uid 10002 runner
+WORKDIR /srv
+COPY --chown=root:root runner ./runner
+
+USER runner
+EXPOSE 8100
+
+CMD ["uvicorn", "runner.main:app", "--host", "0.0.0.0", "--port", "8100"]

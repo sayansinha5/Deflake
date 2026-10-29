@@ -1,0 +1,92 @@
+name: deflake
+
+# Database credentials below default to the development values in .env.example.
+# Paths are relative to this file. From the repository root, pass -f backend/docker-compose.yml.
+# If you change values in .env, start with: docker compose --env-file .env up --build
+
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-deflake_root_dev_pw}
+      DB_NAME: ${DB_NAME:-deflake}
+      DB_USER: ${DB_USER:-deflake_app}
+      DB_PASSWORD: ${DB_PASSWORD:-deflake_app_dev_pw}
+      DB_MIGRATION_USER: ${DB_MIGRATION_USER:-deflake_migrator}
+      DB_MIGRATION_PASSWORD: ${DB_MIGRATION_PASSWORD:-deflake_migrator_dev_pw}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+      - --default-time-zone=+00:00
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./scripts/mysql_init.sh:/docker-entrypoint-initdb.d/mysql_init.sh:ro
+    networks: [internal]
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping --protocol=tcp -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    env_file: ./.env
+    volumes:
+      - ../demo-repos:/demo-repos:ro
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      runner:
+        condition: service_healthy
+    networks: [default, internal]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  runner:
+    build:
+      context: .
+      dockerfile: Dockerfile.runner
+    # Only runner settings: this container never receives AI, search, crowd or expert keys.
+    environment:
+      RUNNER_SHARED_SECRET: ${RUNNER_SHARED_SECRET:-dev_only_runner_secret_change_me_4e91b07d}
+      RUNNER_WORKDIR: /work
+      RUNNER_REPOS_DIR: /repos
+      RUNNER_MAX_PARALLEL: ${RUNNER_MAX_PARALLEL:-4}
+      RUNNER_MEM_LIMIT_MB: ${RUNNER_MEM_LIMIT_MB:-1024}
+      RUNNER_CPU_SECONDS: ${RUNNER_CPU_SECONDS:-120}
+      RUNNER_INTEGRATION: "1"
+    volumes:
+      - ../demo-repos:/repos:ro
+    read_only: true
+    tmpfs:
+      - /work:size=1g,uid=10002,gid=10002,mode=0700
+      - /tmp:size=256m,uid=10002,gid=10002,mode=0700
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 256
+    mem_limit: 3g
+    cpus: 3
+    networks: [internal]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8100/healthz')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+volumes:
+  mysql-data:
+
+networks:
+  default:
+  internal:
+    internal: true
