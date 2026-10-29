@@ -24,7 +24,7 @@ A test that fails on every run is labelled broken and left as it is. A fix is ca
 
 A scan has to sort a failure, explain it, write a fix, and decide whether a person must look. These are the pieces that do that work.
 
-- **Nebius Token Factory**
+- **Nebius Token Factory** \
   Runs every model step. Classification, the patch, and the diagnosis are different jobs, and each one has to come back as an answer the pipeline can check. One account reaches every size of model the scan needs, so a cheap triage step and a careful root-cause step share the same path.
 
 
