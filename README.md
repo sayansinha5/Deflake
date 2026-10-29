@@ -25,17 +25,33 @@ A test that fails on every run is labelled broken and left as it is. A fix is ca
 A scan has to sort a failure, explain it, write a fix, and decide whether a person must look. These are the pieces that do that work.
 
 - **Nebius Token Factory**
+
 Runs every model step. Classification, the patch, and the diagnosis are different jobs, and each one has to come back as an answer the pipeline can check. One account reaches every size of model the scan needs, so a cheap triage step and a careful root-cause step share the same path.
+
+
 - **NVIDIA Nemotron**
+
 The model family those steps call. A fast model sorts each failure and writes the search query, because there are many of them and each answer is short. A balanced model writes the patch and the note for the expert, because the diff has to be small and valid. A reasoning model diagnoses the cause three times, and the samples have to agree before Deflake treats the cause as settled.
+
+
 - **Tavily**
+
 Looks outside the repository after a test is classified. A flake often matches an upstream bug report or a changelog, and that reference belongs next to the diagnosis. When the search finds nothing, or cannot be reached, the diagnosis still continues and the references tab says so.
+
+
 - **Toloka**
+
 Checks whether a written cause actually matches its patch. Reviewers look at the explanation and the change together. Their agreement is what sets the confidence bar for an automatic pull request. Until enough pairs have been reviewed, Deflake keeps the default bar and the calibration screen says so.
+
+
 - **Tendem**
+
 Takes a case when there is no safe patch, or when repeated runs do not prove the fix. The expert receives the runs, the diagnosis, and the patch attempts. When that handoff cannot be completed, Deflake keeps the case and the screen names who holds it.
+
+
 - **LangSmith**
-Records each model call so a scan can be followed afterward. A call is tagged with the scan, the flake, the step, the model tier, and the prompt version. Tracing stays off until `LANGSMITH_TRACING` and `LANGSMITH_API_KEY` are set in `backend/.env`. The test runner is left out of those traces.
+
+Records each model call so a scan can be followed afterward. A call is tagged with the scan, the flake, the step, the model tier, and the prompt version.
 
 ## Let's understand by scenario
 
@@ -88,9 +104,13 @@ git clone git@github.com:sayansinha5/Deflake.git
 ```
 
 From the repository root, copy the environment files:
+
 **Step 1:** Copy the `.env.example` files in both the repos and rename them to `.env`.
+
 **Step 2:** Update the values, example - API keys, client ids and client secrets.
+
 **Step 3:** Open 2 terminals, open the `frontend` folder in one and `backend` in other.
+
 
 ### Running the frontend
 
@@ -104,6 +124,7 @@ npm install
 npm run dev
 ```
 
+
 Open http://localhost:5173 in browser and leave that terminal open.
 
 ### Running the backend
@@ -116,24 +137,36 @@ docker compose up --build
 
 It will take sometime for the first time. Leave it open.
 
+---
+
 Docker Compose starts a container named `Deflake` with three services:
 
 - **api**
+
 The backend api http://localhost:8000 to which the frontend communicates.
+
+
 - **runner**
+
 Runs the project's pytest suite. A scan copies one repository into a throwaway workspace, applies a patch only after it checks, runs the tests, and deletes that workspace.
+
+
 - **mysql**
+
 A persistent DB, that stores accounts, scans, flakes, patches, and the scan checkpoints.
+
 
 Now, open the shell of the api service in Docker.
 
-Migration - Run this command for migration
+
+### Migration - Run this command for migration
 
 ```bash
 sh scripts/migrate.sh
 ```
 
-Seed - Run this command for seed
+
+### Seed - Run this command for seed
 
 Note: The seed loads the Owner, the demo account, and a finished scan of the sample shop. A new scan is started from the app and takes several minutes.
 
@@ -141,7 +174,8 @@ Note: The seed loads the Owner, the demo account, and a finished scan of the sam
 sh scripts/seed.sh
 ```
 
-Sign in with the demo member:
+
+### Sign in with the demo member:
 
 | Email | Password |
 | --- | --- |
@@ -150,16 +184,24 @@ Sign in with the demo member:
 
 ---
 
-**Stop frontend:** Go to frontend terminal, just press `Ctrl + C`
-**Stop backend:** Go to backend terminal, just press `Ctrl + C`. Or if running on `-d` then run command `docker compose down`
+**Stop frontend:**
+
+Go to frontend terminal, just press `Ctrl + C`
+
+
+**Stop backend:**
+
+Go to backend terminal, just press `Ctrl + C`. Or if running on `-d` then run command `docker compose down`
+
 
 The database volume is kept.
+---
 
 ## Nebius Token Factory + NVIDIA Nemotron
 
 The reasoning engine. Three model sizes matched to task difficulty: Nano for cheap, fast triage; Super for writing code; Ultra for root-cause reasoning. This keeps cost and latency down without losing quality where it matters.
 
-## Models used
+### Models used
 
 Each step uses the Nemotron size that fits the job. Diagnosis is asked three times, and the cause has to agree across those samples.
 
@@ -169,7 +211,7 @@ Each step uses the Nemotron size that fits the job. Diagnosis is asked three tim
 | Balanced | `nvidia/nemotron-3-super-120b-a12b` | The patch and the expert summary | The diff has to be valid and small |
 | Reasoning | `nvidia/Nemotron-3-Ultra-550b-a55b` | Diagnosis, three samples | The cause has to agree across samples |
 
-## Where Nebius Token Factory helped
+### Where Nebius Token Factory helped
 
 Every model step in a scan goes to Nebius Token Factory. One account reaches all three Nemotron sizes, so classification, the patch, and the diagnosis each use the model that fits the job. The same kind of structured answer came back on every tier, so the pipeline could stay one client and still receive a category, a diff, or a root cause it could check.
 
