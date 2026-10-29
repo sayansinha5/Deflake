@@ -3,9 +3,15 @@
 ![Banner](screenshots/banner.png)
 
 **Nebius x Nvidia Global AI Hackathon**
+
+
 Hackathon link: [https://nebiusglobalaihackathon.devpost.com](https://nebiusglobalaihackathon.devpost.com/)
 
+
+
 Track: **Coding and Agentic Engineering Track**
+
+
 License: [Apache-2.0](LICENSE)
 
 ---
@@ -59,13 +65,6 @@ Deflake runs one loop.
 4. **Prove.** Rerun the fixed test many times, then the rest of the suite. Zero failures is the bar.
 5. **Route.** A strong proof can open a pull request. A weak one, or a case with no safe patch, goes to a person with the runs, the diagnosis, and the patch attempts.
 
-## Requirements
-
-- Docker with Compose v2
-- About 4 CPU cores and 8 GB of RAM
-- Node.js and npm, for the page
-- Internet access for Nebius Token Factory, Tavily, Toloka, and Tendem
-
 ## Setup and run
 
 Clone the repo
@@ -84,11 +83,11 @@ From the repository root, copy the environment files:
 In the frontend terminal, run the below one by one:
 
 ```bash
-npm install --prefix frontend
+npm install
 ```
 
 ```bash
-npm run dev --prefix frontend
+npm run dev
 ```
 
 Open http://localhost:5173 in browser and leave that terminal open.
@@ -106,14 +105,11 @@ It will take sometime for the first time. Leave it open.
 Docker Compose starts a container named `Deflake` with three services:
 
 - **api**
-  The backend api http://localhost:8000 to which the frontend communicates.
-
+The backend api http://localhost:8000 to which the frontend communicates.
 - **runner**
-  Runs the project's pytest suite. A scan copies one repository into a throwaway workspace, applies a patch only after it checks, runs the tests, and deletes that workspace.
-
+Runs the project's pytest suite. A scan copies one repository into a throwaway workspace, applies a patch only after it checks, runs the tests, and deletes that workspace.
 - **mysql**
-  A persistent DB, that stores accounts, scans, flakes, patches, and the scan checkpoints.
-
+A persistent DB, that stores accounts, scans, flakes, patches, and the scan checkpoints.
 
 Now, open the shell of the api service in Docker.
 
@@ -149,15 +145,15 @@ The database volume is kept.
 
 ![Sign in](screenshots/screenshot01.png)
 
-<img src="screenshots/screenshot02.png" alt="Completed scan, flake cards" width="48%">&nbsp;&nbsp;<img src="screenshots/screenshot03.png" alt="Completed scan, flake table" width="48%">
+![Completed scan, flake cards](screenshots/screenshot02.png)  ![Completed scan, flake table](screenshots/screenshot03.png)
 
-<img src="screenshots/screenshot04.png" alt="Verified patch" width="48%">&nbsp;&nbsp;<img src="screenshots/screenshot05.png" alt="Guardrail rejected a patch" width="48%">
+![Verified patch](screenshots/screenshot04.png)  ![Guardrail rejected a patch](screenshots/screenshot05.png)
 
-<img src="screenshots/screenshot06.png" alt="Failing and passing evidence" width="48%">&nbsp;&nbsp;<img src="screenshots/screenshot07.png" alt="Upstream references" width="48%">
+![Failing and passing evidence](screenshots/screenshot06.png)  ![Upstream references](screenshots/screenshot07.png)
 
-<img src="screenshots/screenshot08.png" alt="Escalations" width="48%">&nbsp;&nbsp;<img src="screenshots/screenshot09.png" alt="Repositories" width="48%">
+![Escalations](screenshots/screenshot08.png)  ![Repositories](screenshots/screenshot09.png)
 
-<img src="screenshots/screenshot10.png" alt="Overview" width="48%">
+![Overview](screenshots/screenshot10.png)
 
 ## Nebius Token Factory + NVIDIA Nemotron
 
