@@ -85,6 +85,10 @@ function isPreparing(row) {
   return row.prepare_status === "pending" || row.prepare_status === "preparing";
 }
 
+function scanInProgress(row) {
+  return row.last_result === "queued" || row.last_result === "running";
+}
+
 function RowMenu({ row, onSync, onRemove, onDetails, disabled }) {
   const [open, setOpen] = useState(false);
   const [menuPos, setMenuPos] = useState(null);
@@ -182,9 +186,12 @@ function RowMenu({ row, onSync, onRemove, onDetails, disabled }) {
           <button
             type="button"
             role="menuitem"
-            className="block w-full px-3 py-2 text-left text-body text-danger hover:bg-danger-subtle"
+            disabled={scanInProgress(row)}
+            title={scanInProgress(row) ? "Wait until the running scan finishes." : undefined}
+            className="block w-full px-3 py-2 text-left text-body text-danger hover:bg-danger-subtle disabled:cursor-not-allowed disabled:opacity-50"
             onClick={(event) => {
               event.stopPropagation();
+              if (scanInProgress(row)) return;
               setOpen(false);
               onRemove(row);
             }}
@@ -753,7 +760,7 @@ export function Repositories() {
         open={Boolean(removeTarget)}
         onOpenChange={(open) => { if (!open) setRemoveTarget(null); }}
         title="Remove repository"
-        description={removeTarget ? `Remove ${displayName(removeTarget)} from Deflake? Prepared files on disk are deleted. Removal is blocked while a scan is running or if this repository already has scans.` : undefined}
+        description={removeTarget ? `Remove ${displayName(removeTarget)} from Deflake?` : undefined}
         footer={(
           <>
             <Button variant="secondary" onClick={() => setRemoveTarget(null)}>Cancel</Button>
@@ -762,7 +769,9 @@ export function Repositories() {
         )}
       >
         <p className="text-body text-ink-secondary">
-          You can import it again later from the same GitHub URL.
+          This also deletes every scan of this repository and all of its scan data.
+          Prepared files on disk are deleted. A repository cannot be removed while a scan
+          is still running. You can import it again later from the same GitHub URL.
         </p>
       </Dialog>
 

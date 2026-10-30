@@ -4,11 +4,26 @@ from __future__ import annotations
 import asyncio
 
 import structlog
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.config import Settings
-from app.db.models import Repo, Run, utcnow
+from app.db.models import (
+    AuditItem,
+    Diagnosis,
+    Escalation,
+    Evidence,
+    Flake,
+    LlmCall,
+    Patch,
+    Reference,
+    Repo,
+    Run,
+    RunEvent,
+    TestOutcome,
+    Verification,
+    utcnow,
+)
 from app.errors import ApiError
 from app.integrations.github.meta import NOT_PUBLIC, fetch_public_repo
 from app.integrations.github.url import GitHubUrlError, parse_github_repo_url, validate_owner_repo
@@ -305,6 +320,62 @@ async def sync_import(
     return repo, prepare_token
 
 
+async def _delete_scan_data(db: AsyncSession, repo_id: str) -> None:
+    """Delete every scan of this repository and the rows that hang off those scans."""
+    run_ids = list(await db.scalars(select(Run.id).where(Run.repo_id == repo_id)))
+    if not run_ids:
+        return
+
+    flake_ids = list(await db.scalars(select(Flake.id).where(Flake.run_id.in_(run_ids))))
+    if flake_ids:
+        patch_ids = list(await db.scalars(select(Patch.id).where(Patch.flake_id.in_(flake_ids))))
+        diagnosis_ids = list(
+            await db.scalars(select(Diagnosis.id).where(Diagnosis.flake_id.in_(flake_ids)))
+        )
+        await db.execute(
+            update(AuditItem).where(AuditItem.flake_id.in_(flake_ids)).values(flake_id=None)
+        )
+        if diagnosis_ids:
+            await db.execute(
+                update(AuditItem)
+                .where(AuditItem.diagnosis_id.in_(diagnosis_ids))
+                .values(diagnosis_id=None)
+            )
+        if patch_ids:
+            await db.execute(
+                update(AuditItem).where(AuditItem.patch_id.in_(patch_ids)).values(patch_id=None)
+            )
+            await db.execute(delete(Verification).where(Verification.patch_id.in_(patch_ids)))
+        await db.execute(delete(Escalation).where(Escalation.flake_id.in_(flake_ids)))
+        await db.execute(delete(Evidence).where(Evidence.flake_id.in_(flake_ids)))
+        await db.execute(delete(Reference).where(Reference.flake_id.in_(flake_ids)))
+        await db.execute(delete(Diagnosis).where(Diagnosis.flake_id.in_(flake_ids)))
+        await db.execute(delete(Patch).where(Patch.flake_id.in_(flake_ids)))
+        await db.execute(delete(LlmCall).where(LlmCall.flake_id.in_(flake_ids)))
+
+    await db.execute(delete(LlmCall).where(LlmCall.run_id.in_(run_ids)))
+    await db.execute(delete(RunEvent).where(RunEvent.run_id.in_(run_ids)))
+    await db.execute(delete(TestOutcome).where(TestOutcome.run_id.in_(run_ids)))
+    await db.execute(delete(Flake).where(Flake.run_id.in_(run_ids)))
+
+    for run_id in run_ids:
+        pattern = f"{run_id}:%"
+        await db.execute(
+            text("DELETE FROM checkpoint_writes WHERE thread_id LIKE :pattern"),
+            {"pattern": pattern},
+        )
+        await db.execute(
+            text("DELETE FROM checkpoint_blobs WHERE thread_id LIKE :pattern"),
+            {"pattern": pattern},
+        )
+        await db.execute(
+            text("DELETE FROM checkpoints WHERE thread_id LIKE :pattern"),
+            {"pattern": pattern},
+        )
+
+    await db.execute(delete(Run).where(Run.id.in_(run_ids)))
+
+
 async def remove_import(
     db: AsyncSession,
     settings: Settings,
@@ -319,17 +390,9 @@ async def remove_import(
     if await active_run_for(db, repo.id) is not None:
         raise ApiError(
             409, "run_already_active",
-            "A scan of this repository is already running. Wait for it to finish.",
+            "This repository cannot be removed while a scan is running.",
         )
-    run_count = int(
-        await db.scalar(select(func.count()).select_from(Run).where(Run.repo_id == repo.id)) or 0
-    )
-    if run_count:
-        raise ApiError(
-            409,
-            "repo_has_runs",
-            "This repository has scans and cannot be removed yet.",
-        )
+    await _delete_scan_data(db, repo.id)
     try:
         await preparer.cleanup(repo.id)
     except ApiError as exc:
