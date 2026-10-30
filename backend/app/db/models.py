@@ -363,3 +363,15 @@ class SearchCache(Base):
     query: Mapped[str] = mapped_column(String(200), nullable=False)
     results: Mapped[list] = mapped_column(JSON, nullable=False)
     fetched_at: Mapped[datetime] = mapped_column(DATETIME(fsp=6), nullable=False)
+
+
+class WorkspaceDefaults(Base):
+    """Single-row workspace preferences that override env defaults for new scans."""
+
+    __tablename__ = "workspace_defaults"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    detect_reruns: Mapped[int] = mapped_column(Integer, nullable=False)
+    verify_reruns: Mapped[int] = mapped_column(Integer, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DATETIME(fsp=6), nullable=False, default=utcnow)
+    updated_by: Mapped[str | None] = mapped_column(CHAR(36), ForeignKey("users.id"))

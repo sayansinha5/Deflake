@@ -21,13 +21,13 @@ const POLL_MS = 2500;
 
 function Segmented({ legend, name, value, options, onChange }) {
   return (
-    <fieldset>
-      <legend className="text-meta text-ink-secondary">{legend}</legend>
-      <div className="mt-1 flex gap-1">
+    <div className="flex items-center justify-between">
+      <legend className="w-3/5 text-meta text-ink-secondary">{legend}</legend>
+      <div className="w-2/5 mt-1 grid grid-cols-3 gap-1.5 w-full">
         {options.map((option) => (
           <label
             key={option}
-            className={`inline-flex h-10 cursor-pointer items-center rounded-md border px-4 text-body ${
+            className={`inline-flex h-8 cursor-pointer items-center justify-center rounded-md border px-4 text-body ${
               value === option ? "border-transparent bg-ink text-white" : "border-border bg-white text-ink hover:bg-ice"
             }`}
           >
@@ -42,7 +42,7 @@ function Segmented({ legend, name, value, options, onChange }) {
           </label>
         ))}
       </div>
-    </fieldset>
+    </div>
   );
 }
 
@@ -273,8 +273,10 @@ export function Repositories() {
   function openScan(row) {
     if (row.prepare_status !== "ready") return;
     setRepo(row);
-    setDetect(30);
-    setVerify(200);
+    const detectDefault = settings?.defaults?.detect_reruns;
+    const verifyDefault = settings?.defaults?.verify_reruns;
+    setDetect(DETECT.includes(detectDefault) ? detectDefault : 30);
+    setVerify(VERIFY.includes(verifyDefault) ? verifyDefault : 200);
     setFormError(null);
   }
 
@@ -580,9 +582,10 @@ export function Repositories() {
         )}
       >
         <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-4 my-4 py-4 border-y border-dashed border-gray-400">
           <Segmented legend="Detect reruns" name="detect" value={detect} options={DETECT} onChange={setDetect} />
           <Segmented legend="Verify reruns" name="verify" value={verify} options={VERIFY} onChange={setVerify} />
-          <p className="text-body text-ink-secondary">Crowd audit is recorded with the scan. It is not a separate switch.</p>
+          </div>
           <p className="text-body text-ink-secondary">
             Escalation route: {route}{fallback ? `, then ${fallback}` : ""}.
           </p>

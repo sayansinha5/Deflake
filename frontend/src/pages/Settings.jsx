@@ -338,18 +338,141 @@ export function SettingsIntegration() {
   );
 }
 
-export function SettingsDefaults() {
-  const { view } = useOutletContext();
-  const defaults = view.defaults;
+const DETECT_CHOICES = [20, 30, 50];
+const VERIFY_CHOICES = [200, 400, 600];
+
+const MODEL_TIERS = [
+  { key: "fast", label: "Fast" },
+  { key: "balanced", label: "Balanced" },
+  { key: "reasoning", label: "Reasoning" },
+];
+
+function modelCard(id) {
+  if (!id) {
+    return { company: "—", name: "Not set" };
+  }
+  const slash = id.indexOf("/");
+  if (slash === -1) {
+    return { company: "NVIDIA", name: id };
+  }
+  const vendor = id.slice(0, slash);
+  const company = vendor.toLowerCase() === "nvidia" ? "NVIDIA" : vendor;
+  return { company, name: id.slice(slash + 1) };
+}
+
+function DefaultsRow({ label, children }) {
   return (
-    <dl className="grid w-full max-w-2xl gap-3 text-sm text-ink">
-      <div><dt className="text-xs text-ink-secondary">Detect reruns</dt><dd>{defaults.detect_reruns}</dd></div>
-      <div><dt className="text-xs text-ink-secondary">Verify reruns</dt><dd>{defaults.verify_reruns}</dd></div>
-      <div><dt className="text-xs text-ink-secondary">Confidence threshold</dt><dd>{Number(defaults.confidence_threshold).toFixed(2)}</dd></div>
-      <div><dt className="text-xs text-ink-secondary">Run budget</dt><dd>{formatMoney(defaults.run_budget_usd)}</dd></div>
-      <div><dt className="text-xs text-ink-secondary">Escalation</dt><dd>{defaults.escalation_provider}, then {defaults.escalation_fallback}</dd></div>
-      <div><dt className="text-xs text-ink-secondary">Models</dt><dd className="font-mono text-xs">{view.models.fast}</dd></div>
-    </dl>
+    <div className="flex min-h-14 flex-wrap items-center justify-between gap-3 border-b border-dashed border-border py-3 last:border-b-0">
+      <div className="min-w-[9rem] text-sm text-ink-secondary">{label}</div>
+      <div className="min-w-0 flex-1 sm:flex sm:justify-end">{children}</div>
+    </div>
+  );
+}
+
+function ChoiceGroup({ name, value, options, onChange, disabled }) {
+  return (
+    <div className="flex flex-wrap justify-end gap-1" role="radiogroup" aria-label={name}>
+      {options.map((option) => (
+        <label
+          key={option}
+          className={`inline-flex h-8 cursor-pointer items-center rounded-md border px-4 text-sm ${
+            value === option
+              ? "border-transparent bg-ink text-white"
+              : "border-border bg-white text-ink hover:bg-ice"
+          } ${disabled ? "cursor-not-allowed opacity-60" : ""}`}
+        >
+          <input
+            className="sr-only"
+            type="radio"
+            name={name}
+            checked={value === option}
+            disabled={disabled}
+            onChange={() => onChange(option)}
+          />
+          {option}
+        </label>
+      ))}
+    </div>
+  );
+}
+
+export function SettingsDefaults() {
+  const { view, load } = useOutletContext();
+  const { push } = useToast();
+  const defaults = view.defaults;
+  const detectChoices = defaults.detect_choices?.length ? defaults.detect_choices : DETECT_CHOICES;
+  const verifyChoices = defaults.verify_choices?.length ? defaults.verify_choices : VERIFY_CHOICES;
+  const [detect, setDetect] = useState(defaults.detect_reruns);
+  const [verify, setVerify] = useState(defaults.verify_reruns);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setDetect(defaults.detect_reruns);
+    setVerify(defaults.verify_reruns);
+  }, [defaults.detect_reruns, defaults.verify_reruns]);
+
+  const dirty = detect !== defaults.detect_reruns || verify !== defaults.verify_reruns;
+
+  async function save() {
+    setSaving(true);
+    try {
+      await api.put("/settings/defaults", {
+        detect_reruns: detect,
+        verify_reruns: verify,
+      });
+      await load();
+      push({ message: "Defaults saved. New scans use these values." });
+    } catch (err) {
+      const normalized = err.normalized || normalizeError(err);
+      push({ tone: "error", message: normalized.message });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="w-full max-w-3xl">
+      <h3 className="text-lg font-medium tracking-wide text-ink">General</h3>
+      <div className="mt-4">
+        <DefaultsRow label="Detect reruns">
+          <ChoiceGroup name="detect-defaults" value={detect} options={detectChoices} onChange={setDetect} disabled={saving} />
+        </DefaultsRow>
+        <DefaultsRow label="Verify reruns">
+          <ChoiceGroup name="verify-defaults" value={verify} options={verifyChoices} onChange={setVerify} disabled={saving} />
+        </DefaultsRow>
+        <DefaultsRow label="Confidence threshold">
+          <span className="text-sm text-ink">{Number(defaults.confidence_threshold).toFixed(2)}</span>
+        </DefaultsRow>
+        <DefaultsRow label="Run budget">
+          <span className="text-sm text-ink">{formatMoney(defaults.run_budget_usd)}</span>
+        </DefaultsRow>
+        <DefaultsRow label="Escalation">
+          <span className="text-sm text-ink">
+            {defaults.escalation_provider}, then {defaults.escalation_fallback}
+          </span>
+        </DefaultsRow>
+      </div>
+      <div className="mt-4 flex justify-end">
+        <Button busy={saving} disabled={!dirty} onClick={save}>Save defaults</Button>
+      </div>
+
+      <h3 className="mt-10 text-lg font-medium tracking-wide text-ink">Models</h3>
+      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        {MODEL_TIERS.map((tier) => {
+          const card = modelCard(view.models?.[tier.key]);
+          return (
+            <article
+              key={tier.key}
+              className="rounded-md border border-border bg-white px-4 py-3"
+            >
+              <p className="text-xs uppercase tracking-wide text-ink-muted">{tier.label}</p>
+              <p className="mt-2 text-sm font-semibold tracking-wide text-gray-600">{card.company}</p>
+              <p className="mt-1 break-all font-mono text-xs text-ink-secondary">{card.name}</p>
+            </article>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
