@@ -81,9 +81,6 @@ export function Sidebar({ collapsed, onNavigate, className }) {
           </div>
         ))}
       </nav>
-      <p className={clsx("shrink-0 border-t border-white/15 px-6 py-3 text-meta text-white/45", collapsed && "px-2 text-center")}>
-        {collapsed ? "L" : appEnv === "development" ? "Local" : appEnv}
-      </p>
     </aside>
   );
 }
