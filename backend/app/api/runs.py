@@ -9,13 +9,14 @@ from sse_starlette.sse import EventSourceResponse
 
 from app.api.deps import CurrentSession, current_session, get_db, get_settings_dep
 from app.config import Settings
-from app.db.models import Flake, Run
+from app.db.models import Flake, Repo, Run
 from app.errors import ApiError
 from app.schemas.auth import UUID_PATTERN
 from app.schemas.runs import REPO_ID, CursorPage, FlakeOut, RunStarted, RunSummary, StartRunIn
 from app.security.ratelimit import limiter
 from app.services import run_manager
 from app.services.events import events_after
+from app.services.repos_access import get_visible_run, visible_repo_filter
 
 router = APIRouter(tags=["runs"])
 HEARTBEAT_S = 15
@@ -31,11 +32,8 @@ def _summary(run: Run, flake_count: int = 0, broken_count: int = 0) -> RunSummar
     )
 
 
-async def _get_run(db: AsyncSession, run_id: str) -> Run:
-    run = await db.get(Run, run_id)
-    if run is None:
-        raise ApiError(404, "run_not_found", "Run not found.")
-    return run
+async def _get_run(db: AsyncSession, run_id: str, user_id: str) -> Run:
+    return await get_visible_run(db, run_id, user_id)
 
 
 @router.post("/repos/{repo_id}/runs", status_code=202, response_model=RunStarted)
@@ -59,17 +57,27 @@ async def start_scan(
 
 @router.get("/runs", response_model=CursorPage)
 async def list_runs(
-    _user: CurrentSession = Depends(current_session),
+    session: CurrentSession = Depends(current_session),
     db: AsyncSession = Depends(get_db),
     limit: int = Query(default=20, ge=1, le=50),
     cursor: str | None = None,
     repo_id: str | None = Query(default=None, pattern=REPO_ID),
 ) -> CursorPage:
-    stmt = select(Run).order_by(Run.created_at.desc(), Run.id.desc())
+    stmt = (
+        select(Run)
+        .join(Repo, Repo.id == Run.repo_id)
+        .where(visible_repo_filter(session.user.id))
+        .order_by(Run.created_at.desc(), Run.id.desc())
+    )
     if repo_id:
         stmt = stmt.where(Run.repo_id == repo_id)
     if cursor:
-        current = await db.get(Run, cursor)
+        current = await db.scalar(
+            select(Run)
+            .join(Repo, Repo.id == Run.repo_id)
+            .where(Run.id == cursor)
+            .where(visible_repo_filter(session.user.id))
+        )
         if current is not None:
             stmt = stmt.where(
                 (Run.created_at < current.created_at)
@@ -100,10 +108,10 @@ async def list_runs(
 @router.get("/runs/{run_id}", response_model=RunSummary)
 async def get_run(
     run_id: str = Path(pattern=UUID_PATTERN),
-    _user: CurrentSession = Depends(current_session),
+    session: CurrentSession = Depends(current_session),
     db: AsyncSession = Depends(get_db),
 ) -> RunSummary:
-    run = await _get_run(db, run_id)
+    run = await _get_run(db, run_id, session.user.id)
     rows = await db.execute(
         select(Flake.state, func.count()).where(Flake.run_id == run.id).group_by(Flake.state)
     )
@@ -116,10 +124,10 @@ async def get_run(
 @router.get("/runs/{run_id}/flakes", response_model=list[FlakeOut])
 async def list_flakes(
     run_id: str = Path(pattern=UUID_PATTERN),
-    _user: CurrentSession = Depends(current_session),
+    session: CurrentSession = Depends(current_session),
     db: AsyncSession = Depends(get_db),
 ) -> list[FlakeOut]:
-    await _get_run(db, run_id)
+    await _get_run(db, run_id, session.user.id)
     flakes = list(await db.scalars(
         select(Flake).where(Flake.run_id == run_id).order_by(Flake.rate.desc(), Flake.test_id)
     ))
@@ -129,10 +137,10 @@ async def list_flakes(
 @router.post("/runs/{run_id}/cancel", status_code=202, response_model=RunSummary)
 async def cancel_run(
     run_id: str = Path(pattern=UUID_PATTERN),
-    _user: CurrentSession = Depends(current_session),
+    session: CurrentSession = Depends(current_session),
     db: AsyncSession = Depends(get_db),
 ) -> RunSummary:
-    run = await run_manager.request_cancel(db, await _get_run(db, run_id))
+    run = await run_manager.request_cancel(db, await _get_run(db, run_id, session.user.id))
     return _summary(run)
 
 
@@ -140,11 +148,11 @@ async def cancel_run(
 async def resume_run(
     request: Request,
     run_id: str = Path(pattern=UUID_PATTERN),
-    _user: CurrentSession = Depends(current_session),
+    session: CurrentSession = Depends(current_session),
     db: AsyncSession = Depends(get_db),
     settings: Settings = Depends(get_settings_dep),
 ) -> RunStarted:
-    run = await _get_run(db, run_id)
+    run = await _get_run(db, run_id, session.user.id)
     run = await run_manager.resume_run(
         request.app.state.sessionmaker, settings, request.app.state.runner, db, run,
     )
@@ -155,10 +163,10 @@ async def resume_run(
 async def stream_events(
     request: Request,
     run_id: str = Path(pattern=UUID_PATTERN),
-    _user: CurrentSession = Depends(current_session),
+    session: CurrentSession = Depends(current_session),
 ):
-    async with request.app.state.sessionmaker() as session:
-        await _get_run(session, run_id)
+    async with request.app.state.sessionmaker() as db:
+        await _get_run(db, run_id, session.user.id)
     try:
         after = int(request.headers.get("Last-Event-ID") or 0)
     except ValueError:

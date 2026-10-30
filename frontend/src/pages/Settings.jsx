@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Menu as MenuIcon } from "lucide-react";
-import { NavLink, Outlet, useLocation, useOutletContext } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate, useOutletContext, useSearchParams } from "react-router-dom";
 
 import { PageHeader } from "../components/layout/PageHeader";
 import { useShell } from "../components/layout/shell";
@@ -13,7 +13,14 @@ import { SkeletonRows } from "../components/ui/Table";
 import { useToast } from "../components/ui/Toast";
 import { useAuth } from "../hooks/useAuth";
 import { api, normalizeError } from "../lib/api";
+import { apiBaseUrl } from "../lib/config";
 import { formatMoney } from "../lib/format";
+
+const GITHUB_BANNER = {
+  connected: { tone: "success", message: "GitHub connected." },
+  denied: { tone: "warning", message: "GitHub connection was cancelled." },
+  error: { tone: "error", message: "GitHub connection could not be completed. Try again." },
+};
 
 const STATUS = { configured: "Configured", missing: "Missing", disabled: "Disabled" };
 
@@ -154,6 +161,7 @@ export function Settings() {
           {view ? (
             <Outlet context={{
               view,
+              load,
               user,
               owner,
               busy,
@@ -189,24 +197,144 @@ export function Settings() {
 }
 
 export function SettingsIntegration() {
-  const { view, busy, test } = useOutletContext();
+  const { view, load, busy, test } = useOutletContext();
+  const { push } = useToast();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const [connectOpen, setConnectOpen] = useState(false);
+  const [disconnectOpen, setDisconnectOpen] = useState(false);
+  const [disconnectBusy, setDisconnectBusy] = useState(false);
+  const github = view.github || {};
+  const [banner, setBanner] = useState(null);
+
+  const githubQuery = searchParams.get("github");
+  useEffect(() => {
+    if (!githubQuery || !GITHUB_BANNER[githubQuery]) return undefined;
+    setBanner(GITHUB_BANNER[githubQuery]);
+    load();
+    navigate("/settings/integration", { replace: true });
+    return undefined;
+  }, [githubQuery, load, navigate]);
+
+  async function disconnect() {
+    setDisconnectBusy(true);
+    try {
+      await api.delete("/github/connection");
+      setDisconnectOpen(false);
+      await load();
+      push({ message: "GitHub disconnected.", tone: "success" });
+    } catch (err) {
+      const normalized = err.normalized || normalizeError(err);
+      push({ tone: "error", message: normalized.message });
+    } finally {
+      setDisconnectBusy(false);
+    }
+  }
+
+  function continueToGithub() {
+    setConnectOpen(false);
+    window.location.assign(`${apiBaseUrl}/github/oauth/start`);
+  }
+
   return (
-    <ul className="flex w-full max-w-2xl flex-col gap-2">
-      {view.integrations.map((item) => (
-        <li key={item.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-surface px-4 py-3 shadow-card">
-          <div>
-            <p className="text-sm text-ink">{item.label}</p>
-            {item.detail && item.id !== "tendem" ? <p className="text-xs text-ink-secondary">{item.detail}</p> : null}
+    <div className="flex w-full max-w-2xl flex-col gap-4">
+      {banner ? (
+        <div
+          role="status"
+          className={
+            banner.tone === "success"
+              ? "rounded-md border border-border bg-ice px-4 py-3 text-sm text-ink"
+              : banner.tone === "warning"
+                ? "rounded-md border border-border bg-sunken px-4 py-3 text-sm text-ink"
+                : "rounded-md border border-danger/30 bg-sunken px-4 py-3 text-sm text-danger"
+          }
+        >
+          {banner.message}
+        </div>
+      ) : null}
+
+      <div className="rounded-md border border-border bg-surface px-4 py-3 shadow-card">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-ink">GitHub</p>
+            {!github.oauth_enabled ? (
+              <p className="mt-1 text-xs text-ink-secondary">
+                GitHub OAuth is turned off in this environment.
+              </p>
+            ) : github.connected ? (
+              <>
+                <p className="mt-1 text-sm text-ink">
+                  Connected as <span className="font-medium">@{github.login}</span>
+                </p>
+                {github.scopes ? (
+                  <p className="mt-1 text-xs text-ink-secondary">Scopes: {github.scopes}</p>
+                ) : null}
+              </>
+            ) : (
+              <p className="mt-1 text-xs text-ink-secondary">
+                Connect to import private repositories and open pull requests.
+              </p>
+            )}
           </div>
           <div className="flex items-center gap-2">
-            <Badge tone={item.status === "configured" ? "success" : item.status === "missing" ? "danger" : "neutral"}>
-              {STATUS[item.status] || item.status}
+            <Badge tone={github.connected ? "success" : "neutral"}>
+              {github.connected ? "Connected" : "Not connected"}
             </Badge>
-            <Button variant="secondary" busy={busy === item.id} onClick={() => test(item.id)}>Test</Button>
+            {github.oauth_enabled && !github.connected ? (
+              <Button onClick={() => setConnectOpen(true)}>Connect GitHub</Button>
+            ) : null}
+            {github.oauth_enabled && github.connected ? (
+              <Button variant="secondary" onClick={() => setDisconnectOpen(true)}>Disconnect</Button>
+            ) : null}
           </div>
-        </li>
-      ))}
-    </ul>
+        </div>
+      </div>
+
+      <ul className="flex flex-col gap-2">
+        {view.integrations.map((item) => (
+          <li key={item.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-surface px-4 py-3 shadow-card">
+            <div>
+              <p className="text-sm text-ink">{item.label}</p>
+              {item.detail && item.id !== "tendem" ? <p className="text-xs text-ink-secondary">{item.detail}</p> : null}
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge tone={item.status === "configured" ? "success" : item.status === "missing" ? "danger" : "neutral"}>
+                {STATUS[item.status] || item.status}
+              </Badge>
+              <Button variant="secondary" busy={busy === item.id} onClick={() => test(item.id)}>Test</Button>
+            </div>
+          </li>
+        ))}
+      </ul>
+
+      <Dialog
+        open={connectOpen}
+        onOpenChange={setConnectOpen}
+        title="Connect GitHub"
+        description="Deflake will ask GitHub for access to your repositories. GitHub grants read and write access; Deflake only reads code, and writes only when you click Create pull request."
+        footer={(
+          <>
+            <Button variant="secondary" onClick={() => setConnectOpen(false)}>Cancel</Button>
+            <Button onClick={continueToGithub}>Continue to GitHub</Button>
+          </>
+        )}
+      />
+
+      <Dialog
+        open={disconnectOpen}
+        onOpenChange={(next) => { if (!next && !disconnectBusy) setDisconnectOpen(false); }}
+        title="Disconnect GitHub?"
+        description="Private repositories will need a reconnect before you can sync or scan them again. Public imports stay available."
+        footer={(
+          <>
+            <Button variant="secondary" disabled={disconnectBusy} onClick={() => setDisconnectOpen(false)}>
+              Keep connected
+            </Button>
+            <Button variant="danger" busy={disconnectBusy} onClick={disconnect}>Disconnect</Button>
+          </>
+        )}
+      />
+    </div>
   );
 }
 

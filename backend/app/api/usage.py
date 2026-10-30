@@ -6,7 +6,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import CurrentSession, current_session, get_db
-from app.db.models import LlmCall, Run
+from app.db.models import LlmCall, Repo, Run
+from app.services.repos_access import visible_repo_filter
 
 router = APIRouter(prefix="/usage", tags=["usage"])
 
@@ -31,7 +32,7 @@ def _when(value: str | None, default: datetime) -> datetime:
 
 @router.get("")
 async def get_usage(
-    _user: CurrentSession = Depends(current_session),
+    session: CurrentSession = Depends(current_session),
     db: AsyncSession = Depends(get_db),
     start: str | None = Query(default=None, alias="from"),
     end: str | None = Query(default=None, alias="to"),
@@ -68,9 +69,16 @@ async def get_usage(
             run_bucket["input_tokens"] += call.input_tokens
             run_bucket["output_tokens"] += call.output_tokens
             run_bucket["cost_usd"] += float(call.cost_usd or 0)
-    repos = {}
+    visible_run_ids: set[str] = set()
+    repos: dict[str, str] = {}
     if by_run:
-        rows = list(await db.scalars(select(Run).where(Run.id.in_(list(by_run)))))
+        rows = list(await db.scalars(
+            select(Run)
+            .join(Repo, Repo.id == Run.repo_id)
+            .where(Run.id.in_(list(by_run)))
+            .where(visible_repo_filter(session.user.id))
+        ))
+        visible_run_ids = {row.id for row in rows}
         repos = {row.id: row.repo_id for row in rows}
     return {
         "from": window_start.isoformat() + "Z",
@@ -91,5 +99,6 @@ async def get_usage(
         "runs": [
             {**row, "repo_id": repos.get(row["run_id"]), "cost_usd": round(row["cost_usd"], 6)}
             for row in sorted(by_run.values(), key=lambda item: item["cost_usd"], reverse=True)
+            if row["run_id"] in visible_run_ids
         ],
     }

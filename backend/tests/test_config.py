@@ -15,6 +15,7 @@ VALID = {
     "db_migration_user": "migrator",
     "db_migration_password": "migrator-pw",
     "runner_shared_secret": STRONG,
+    "preparer_shared_secret": STRONG,
     "ai_provider": "nebius_token_factory",
     "ai_base_url": "https://example.test/v1",
     "ai_api_key": "test-key",
@@ -103,3 +104,52 @@ def test_overlap_ignores_an_inline_comment():
 def test_unknown_escalation_provider_is_rejected():
     with pytest.raises(ValidationError, match="ESCALATION_PROVIDER"):
         build(escalation_provider="slack")
+
+
+def test_oauth_disabled_needs_no_github_oauth_values():
+    settings = build(github_oauth_enabled=False, github_oauth_client_id="")
+    assert settings.github_oauth_enabled is False
+    assert settings.github_oauth_client_id is None
+
+
+def test_oauth_enabled_requires_client_id_secret_and_encryption_key():
+    with pytest.raises(ValidationError, match="GITHUB_OAUTH_CLIENT_ID"):
+        build(github_oauth_enabled=True, github_oauth_client_id="")
+    with pytest.raises(ValidationError, match="GITHUB_OAUTH_CLIENT_SECRET"):
+        build(
+            github_oauth_enabled=True,
+            github_oauth_client_id="client",
+            github_oauth_client_secret="",
+            github_token_encryption_key="not-a-fernet-key",
+        )
+    with pytest.raises(ValidationError, match="GITHUB_TOKEN_ENCRYPTION_KEY"):
+        build(
+            github_oauth_enabled=True,
+            github_oauth_client_id="client",
+            github_oauth_client_secret="secret",
+            github_token_encryption_key="",
+        )
+
+
+def test_oauth_enabled_rejects_invalid_fernet_key():
+    with pytest.raises(ValidationError, match="Fernet"):
+        build(
+            github_oauth_enabled=True,
+            github_oauth_client_id="client",
+            github_oauth_client_secret="secret",
+            github_token_encryption_key="not-a-fernet-key",
+        )
+
+
+def test_oauth_enabled_accepts_a_fernet_key():
+    from cryptography.fernet import Fernet
+
+    key = Fernet.generate_key().decode()
+    settings = build(
+        github_oauth_enabled=True,
+        github_oauth_client_id="client",
+        github_oauth_client_secret="secret",
+        github_token_encryption_key=key,
+    )
+    assert settings.github_oauth_enabled is True
+    assert settings.github_import_enabled is True

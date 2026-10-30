@@ -1,14 +1,17 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import { Copy as CopyIcon } from "lucide-react";
 
 import { DiffView } from "../components/domain/DiffView";
 import { TrustLadder } from "../components/domain/TrustLadder";
 import { PageHeader } from "../components/layout/PageHeader";
 import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
+import { Dialog } from "../components/ui/Dialog";
 import { ErrorState } from "../components/ui/States";
 import { SkeletonRows } from "../components/ui/Table";
 import { TabPanel, Tabs } from "../components/ui/Tabs";
+import { Tooltip } from "../components/ui/Tooltip";
 import { useToast } from "../components/ui/Toast";
 import { api, normalizeError } from "../lib/api";
 import { downloadFile } from "../lib/download";
@@ -21,7 +24,6 @@ import {
   statusLabel,
   statusTone,
 } from "../lib/format";
-import { Copy as CopyIcon } from "lucide-react";
 
 function consensusLabel(value) {
   if (value === "no_consensus") return "No consensus";
@@ -68,6 +70,10 @@ export function FlakeDetail() {
   const [repoName, setRepoName] = useState("");
   const [error, setError] = useState(null);
   const [tab, setTab] = useState("diagnosis");
+  const [prOpen, setPrOpen] = useState(false);
+  const [prPreview, setPrPreview] = useState(null);
+  const [prLoading, setPrLoading] = useState(false);
+  const [prBusy, setPrBusy] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
@@ -110,6 +116,39 @@ export function FlakeDetail() {
     } catch (err) {
       const normalized = err.normalized || normalizeError(err);
       push({ tone: "error", message: normalized.message });
+    }
+  }
+
+  async function openPrModal() {
+    setPrOpen(true);
+    setPrLoading(true);
+    setPrPreview(null);
+    try {
+      const response = await api.get(`/flakes/${flake.id}/pull-request`);
+      setPrPreview(response.data);
+    } catch (err) {
+      const normalized = err.normalized || normalizeError(err);
+      setPrPreview({ can_create: false, disabled_reason: normalized.message });
+    } finally {
+      setPrLoading(false);
+    }
+  }
+
+  async function createPullRequest() {
+    if (!flake) return;
+    setPrBusy(true);
+    try {
+      const response = await api.post(`/flakes/${flake.id}/pull-request`);
+      setPrOpen(false);
+      push({ message: `Pull request #${response.data.number} opened.`, tone: "success" });
+      if (response.data.html_url) {
+        window.open(response.data.html_url, "_blank", "noopener,noreferrer");
+      }
+    } catch (err) {
+      const normalized = err.normalized || normalizeError(err);
+      push({ tone: "error", message: normalized.message });
+    } finally {
+      setPrBusy(false);
     }
   }
 
@@ -209,8 +248,11 @@ export function FlakeDetail() {
               ) : null}
             </TabPanel>
             <TabPanel value="patch">
-              <div className="mb-3 flex gap-2">
+              <div className="mb-3 flex flex-wrap gap-2">
                 {(flake.patches || []).length ? <Button variant="secondary" onClick={() => download("patch")}>Download patch</Button> : null}
+                {flake.pull_request?.show ? (
+                  <Button onClick={openPrModal}>Open pull request</Button>
+                ) : null}
                 {flake.escalation ? <Button variant="secondary" onClick={() => download("bundle")}>Download bundle</Button> : null}
               </div>
               {(flake.patches || []).length === 0 ? <p className="text-body text-ink-secondary">No patch was proposed.</p> : null}
@@ -313,6 +355,60 @@ export function FlakeDetail() {
               )}
             </TabPanel>
           </Tabs>
+
+          <Dialog
+            open={prOpen}
+            onOpenChange={(next) => { if (!next && !prBusy) setPrOpen(false); }}
+            title="Open pull request"
+            description={prPreview?.full_name ? `Target ${prPreview.full_name}` : "Create a pull request on GitHub from the verified patch."}
+            footer={(
+              <>
+                <Button variant="secondary" disabled={prBusy} onClick={() => setPrOpen(false)}>Cancel</Button>
+                {prPreview?.can_create ? (
+                  <Button busy={prBusy} onClick={createPullRequest}>Create pull request</Button>
+                ) : (
+                  <Tooltip label={prPreview?.disabled_reason || "Pull request unavailable"}>
+                    <span className="inline-flex">
+                      <Button disabled>Create pull request</Button>
+                    </span>
+                  </Tooltip>
+                )}
+              </>
+            )}
+          >
+            {prLoading ? <p className="text-body text-ink-secondary">Checking GitHub access…</p> : null}
+            {!prLoading && prPreview ? (
+              <div className="flex flex-col gap-3 text-body text-ink">
+                {prPreview.disabled_reason && !prPreview.can_create ? (
+                  <p className="rounded-md border border-border bg-sunken px-3 py-2 text-ink" role="alert">
+                    {prPreview.disabled_reason}
+                  </p>
+                ) : null}
+                {prPreview.branch ? (
+                  <p>
+                    <span className="text-ink-secondary">Branch. </span>
+                    <code className="text-meta">{prPreview.branch}</code>
+                    {prPreview.base_branch ? (
+                      <span className="text-ink-secondary"> → {prPreview.base_branch}</span>
+                    ) : null}
+                  </p>
+                ) : null}
+                {prPreview.title ? (
+                  <p><span className="text-ink-secondary">Title. </span>{prPreview.title}</p>
+                ) : null}
+                {prPreview.default_moved ? (
+                  <p className="text-meta text-ink-secondary">
+                    The default branch has moved since the scan. The PR still starts from the scanned commit.
+                  </p>
+                ) : null}
+                {prPreview.body ? (
+                  <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-md border border-border bg-sunken p-3 text-meta text-ink">
+                    {prPreview.body}
+                  </pre>
+                ) : null}
+              </div>
+            ) : null}
+          </Dialog>
         </div>
       ) : null}
     </div>

@@ -57,6 +57,14 @@ async def test_list_repos_and_runs(app, client):
         await db.commit()
     repos = (await client.get("/api/repos")).json()
     assert {r["id"] for r in repos} >= {"flaky-shop"}
+    shop = next(r for r in repos if r["id"] == "flaky-shop")
+    assert shop["source"] == "demo"
+    assert shop["prepare_status"] == "ready"
+    assert shop["is_private"] is False
+    settings = (await client.get("/api/settings")).json()
+    assert settings["github"] == {
+        "import_enabled": True, "oauth_enabled": False, "connected": False,
+    }
     listed = (await client.get("/api/runs")).json()
     assert listed["items"][0]["id"] == run.id
     assert listed["items"][0]["flake_count"] == 1

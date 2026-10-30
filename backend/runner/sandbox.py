@@ -15,7 +15,9 @@ from runner.junit import parse_junit, truncate
 from runner.patches import PatchRejected, apply_patch
 from runner.schemas import Iteration, Job, JobResult, TestOutcome
 
-COPY_IGNORE = shutil.ignore_patterns(".git", "__pycache__", "*.pyc", ".pytest_cache", ".venv")
+COPY_IGNORE = shutil.ignore_patterns(
+    ".git", "__pycache__", "*.pyc", ".pytest_cache", ".venv", "venv",
+)
 
 
 @dataclass(frozen=True)
@@ -35,6 +37,13 @@ class Limits:
         )
 
 
+@dataclass(frozen=True)
+class ResolvedRepo:
+    source_dir: Path
+    python: Path
+    imported: bool
+
+
 class JobError(Exception):
     def __init__(self, code: str, message: str) -> None:
         super().__init__(message)
@@ -42,12 +51,31 @@ class JobError(Exception):
         self.message = message
 
 
-def resolve_repo(repos_dir: Path, repo_id: str) -> Path:
+def resolve_repo(
+    repos_dir: Path,
+    repo_id: str,
+    repos_data_dir: Path | None = None,
+) -> ResolvedRepo:
+    """Prefer an imported prepare layout under repos-data; else demo repos_dir."""
+    if repos_data_dir is not None:
+        root = repos_data_dir.resolve()
+        imported_src = (root / repo_id / "src").resolve()
+        if imported_src.is_dir() and imported_src.is_relative_to(root):
+            # venv/bin/python is usually a symlink into the image's Python. Check
+            # the path under repos-data, not the resolved target outside the volume.
+            python = root / repo_id / "venv" / "bin" / "python"
+            if not python.parent.resolve().is_relative_to(root) or not python.exists():
+                raise JobError(
+                    "repo_not_ready",
+                    f"imported repository {repo_id!r} has no virtualenv",
+                )
+            return ResolvedRepo(source_dir=imported_src, python=python, imported=True)
+
     root = repos_dir.resolve()
     repo = (root / repo_id).resolve()
     if not repo.is_relative_to(root) or not repo.is_dir():
         raise JobError("unknown_repo", f"repository {repo_id!r} is not available")
-    return repo
+    return ResolvedRepo(source_dir=repo, python=Path(sys.executable), imported=False)
 
 
 def _limit_child(limits: Limits):
@@ -62,9 +90,23 @@ def _limit_child(limits: Limits):
     return apply
 
 
-def _pytest_command(job: Job, seed: int, junit_path: Path, order_file: Path | None) -> list[str]:
+def _pythonpath(workspace: Path) -> str:
+    parts = [str(workspace)]
+    src = workspace / "src"
+    if src.is_dir():
+        parts.insert(0, str(src))
+    return os.pathsep.join(parts)
+
+
+def _pytest_command(
+    python: Path,
+    job: Job,
+    seed: int,
+    junit_path: Path,
+    order_file: Path | None,
+) -> list[str]:
     cmd = [
-        sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider",
+        str(python), "-m", "pytest", "-q", "-p", "no:cacheprovider",
         "-p", "randomly", f"--randomly-seed={seed}",
         f"--timeout={job.timeout_s}", "--timeout-method=signal",
         "-o", "junit_family=xunit1", f"--junitxml={junit_path}",
@@ -78,8 +120,16 @@ def _pytest_command(job: Job, seed: int, junit_path: Path, order_file: Path | No
     return cmd
 
 
-def _run_iteration(job: Job, index: int, seed: int, hash_seed: int, base: Path,
-                   job_dir: Path, limits: Limits) -> Iteration:
+def _run_iteration(
+    job: Job,
+    index: int,
+    seed: int,
+    hash_seed: int,
+    base: Path,
+    python: Path,
+    job_dir: Path,
+    limits: Limits,
+) -> Iteration:
     it_dir = job_dir / f"it-{index}"
     workspace = it_dir / "repo"
     shutil.copytree(base, workspace, ignore=COPY_IGNORE, symlinks=False)
@@ -93,12 +143,14 @@ def _run_iteration(job: Job, index: int, seed: int, hash_seed: int, base: Path,
         "PATH": os.environ.get("PATH", "/usr/local/bin:/usr/bin:/bin"),
         "HOME": str(workspace),
         "PYTHONHASHSEED": str(hash_seed),
+        "PYTHONPATH": _pythonpath(workspace),
+        "PYTHONDONTWRITEBYTECODE": "1",
     }
     started = time.monotonic()
     status = "ok"
     error = None
     proc = subprocess.Popen(  # noqa: S603
-        _pytest_command(job, seed, junit_path, order_file),
+        _pytest_command(python, job, seed, junit_path, order_file),
         cwd=workspace, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
         stdin=subprocess.DEVNULL, start_new_session=True, preexec_fn=_limit_child(limits),
     )
@@ -138,9 +190,15 @@ def _run_iteration(job: Job, index: int, seed: int, hash_seed: int, base: Path,
     )
 
 
-def run_job(job: Job, repos_dir: Path, work_dir: Path, limits: Limits | None = None) -> JobResult:
+def run_job(
+    job: Job,
+    repos_dir: Path,
+    work_dir: Path,
+    limits: Limits | None = None,
+    repos_data_dir: Path | None = None,
+) -> JobResult:
     limits = limits or Limits.from_env()
-    repo = resolve_repo(repos_dir, job.repo_id)
+    resolved = resolve_repo(repos_dir, job.repo_id, repos_data_dir=repos_data_dir)
     rng = random.SystemRandom()
     seeds = job.seeds or [rng.randrange(2**32) for _ in range(job.iterations)]
     hash_seeds = job.hash_seeds or [rng.randrange(2**32) for _ in range(job.iterations)]
@@ -149,7 +207,7 @@ def run_job(job: Job, repos_dir: Path, work_dir: Path, limits: Limits | None = N
     job_dir.mkdir(parents=True)
     try:
         base = job_dir / "base" / "repo"
-        shutil.copytree(repo, base, ignore=COPY_IGNORE, symlinks=False)
+        shutil.copytree(resolved.source_dir, base, ignore=COPY_IGNORE, symlinks=False)
         if job.patch:
             try:
                 apply_patch(job.patch, base)
@@ -158,7 +216,10 @@ def run_job(job: Job, repos_dir: Path, work_dir: Path, limits: Limits | None = N
 
         with ThreadPoolExecutor(max_workers=limits.max_parallel) as pool:
             futures = [
-                pool.submit(_run_iteration, job, i, seeds[i], hash_seeds[i], base, job_dir, limits)
+                pool.submit(
+                    _run_iteration, job, i, seeds[i], hash_seeds[i],
+                    base, resolved.python, job_dir, limits,
+                )
                 for i in range(job.iterations)
             ]
             iterations = [f.result() for f in futures]

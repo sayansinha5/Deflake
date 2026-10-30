@@ -70,15 +70,52 @@ class SecurityLog(Base):
     created_at: Mapped[datetime] = mapped_column(DATETIME(fsp=6), nullable=False, default=utcnow)
 
 
+class GithubAccount(Base):
+    __tablename__ = "github_accounts"
+    __table_args__ = (
+        UniqueConstraint("user_id", name="uq_github_accounts_user_id"),
+        UniqueConstraint("github_user_id", name="uq_github_accounts_github_user_id"),
+        Index("ix_github_accounts_user_id", "user_id"),
+    )
+
+    id: Mapped[str] = mapped_column(CHAR(36), primary_key=True, default=new_id)
+    user_id: Mapped[str] = mapped_column(CHAR(36), ForeignKey("users.id"), nullable=False)
+    github_user_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    login: Mapped[str] = mapped_column(String(64), nullable=False)
+    avatar_url: Mapped[str | None] = mapped_column(String(512))
+    scopes: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    access_token_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
+    connected_at: Mapped[datetime] = mapped_column(DATETIME(fsp=6), nullable=False, default=utcnow)
+    revoked_at: Mapped[datetime | None] = mapped_column(DATETIME(fsp=6))
+
+
 class Repo(Base):
     __tablename__ = "repos"
+    __table_args__ = (
+        Index("ix_repos_source", "source"),
+        Index("ix_repos_created_by", "created_by"),
+        Index("ix_repos_prepare_status", "prepare_status"),
+    )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     name: Mapped[str] = mapped_column(String(120), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False, default="")
     path: Mapped[str] = mapped_column(String(255), nullable=False)
+    source: Mapped[str] = mapped_column(String(24), nullable=False, default="demo")
+    owner: Mapped[str | None] = mapped_column(String(64))
+    default_branch: Mapped[str | None] = mapped_column(String(255))
+    html_url: Mapped[str | None] = mapped_column(String(512))
+    is_private: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    github_account_id: Mapped[str | None] = mapped_column(
+        CHAR(36), ForeignKey("github_accounts.id"),
+    )
+    commit_sha: Mapped[str | None] = mapped_column(String(64))
     test_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     editable_paths: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    prepare_status: Mapped[str] = mapped_column(String(24), nullable=False, default="ready")
+    prepare_error: Mapped[str | None] = mapped_column(MEDIUMTEXT)
+    last_prepared_at: Mapped[datetime | None] = mapped_column(DATETIME(fsp=6))
+    created_by: Mapped[str | None] = mapped_column(CHAR(36), ForeignKey("users.id"))
     updated_at: Mapped[datetime] = mapped_column(DATETIME(fsp=6), nullable=False, default=utcnow)
 
 

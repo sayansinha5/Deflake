@@ -6,7 +6,9 @@ from fastapi import FastAPI
 from slowapi.middleware import SlowAPIMiddleware
 from starlette.middleware.cors import CORSMiddleware
 
-from app.api import auth, calibration, escalations, flakes, health, members, repos, runs, usage
+from app.api import (
+    auth, calibration, escalations, flakes, github_oauth, health, members, repos, runs, usage,
+)
 from app.api import settings as settings_api
 from app.config import Settings, get_settings
 from app.db.engine import build_engine, build_sessionmaker
@@ -14,6 +16,7 @@ from app.errors import install_error_handlers
 from app.llm.factory import Llm
 from app.logsetup import configure_logging
 from app.middleware import CsrfHeaderMiddleware, RequestContextMiddleware
+from app.preparer_client import PreparerClient
 from app.runner_client import RunnerClient
 from app.security.headers import SecurityHeadersMiddleware
 from app.security.ratelimit import limiter
@@ -66,6 +69,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.sessionmaker = build_sessionmaker(app.state.engine)
     app.state.limiter = limiter
     app.state.runner = RunnerClient(settings)
+    app.state.preparer = PreparerClient(settings)
     app.state.llm = Llm(settings, session_factory=app.state.sessionmaker)
 
     install_error_handlers(app)
@@ -80,6 +84,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(calibration.router, prefix="/api")
     app.include_router(usage.router, prefix="/api")
     app.include_router(settings_api.router, prefix="/api")
+    app.include_router(github_oauth.router, prefix="/api")
 
     # Added innermost first: the last middleware added runs first on each request.
     app.add_middleware(CsrfHeaderMiddleware)

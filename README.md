@@ -201,7 +201,15 @@ sh scripts/seed.sh
 
 The database volume is kept.
 
+## GitHub repositories and pull requests
 
+Deflake can scan more than the local demo shop.
+
+1. **Public URL** — On Repositories, use **Add repository** and paste an `https://github.com/{owner}/{repo}` URL. Deflake clones the default branch, installs dependencies only (never the project itself), and prepares a venv for offline scans.
+2. **Connect GitHub** — In Settings → Integration, connect a GitHub OAuth App account. That unlocks private imports from **From your GitHub** and lets you open pull requests for verified fixes.
+3. **Open pull request** — On a flake routed to automatic PR with a verified patch, **Open pull request** creates a branch `deflake/fix-{test}-{id}` from the **scanned** commit (via the Git Data API, not `git push`), then opens a PR against the default branch. The body includes root cause, before/after rates, guardrails, references, and the scanned SHA. You need push access on the repo; otherwise download the patch instead.
+
+Configure OAuth in `backend/.env` (`GITHUB_OAUTH_ENABLED`, client id/secret, and a Fernet key from `make keys`). Public import works with OAuth off.
 
 ## Nebius Token Factory + NVIDIA Nemotron
 

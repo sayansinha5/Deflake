@@ -10,6 +10,7 @@ from runner.schemas import Job, JobResult
 
 SECRET = os.environ.get("RUNNER_SHARED_SECRET", "")
 REPOS_DIR = Path(os.environ.get("RUNNER_REPOS_DIR", "/repos"))
+REPOS_DATA_DIR = Path(os.environ.get("RUNNER_REPOS_DATA_DIR", "/repos-data"))
 WORK_DIR = Path(os.environ.get("RUNNER_WORKDIR", "/work"))
 
 if len(SECRET) < 16:
@@ -32,7 +33,7 @@ def healthz() -> dict:
 def jobs(job: Job, x_runner_secret: str | None = Header(default=None)) -> JobResult:
     _check_secret(x_runner_secret)
     try:
-        return run_job(job, REPOS_DIR, WORK_DIR)
+        return run_job(job, REPOS_DIR, WORK_DIR, repos_data_dir=REPOS_DATA_DIR)
     except JobError as exc:
         return JSONResponse(status_code=422, content={"error": {"code": exc.code,
                                                                 "message": exc.message}})
