@@ -48,8 +48,15 @@ async def start_run(
     session: AsyncSession, settings: Settings, repo_id: str, user_id: str,
     detect_reruns: int | None, verify_reruns: int | None,
 ) -> Run:
-    detect_n = detect_reruns or settings.detect_reruns
-    verify_n = verify_reruns or settings.verify_reruns
+    if detect_reruns is None or verify_reruns is None:
+        from app.services.workspace_defaults import get_defaults
+
+        stored = await get_defaults(session, settings)
+        detect_n = detect_reruns if detect_reruns is not None else stored["detect_reruns"]
+        verify_n = verify_reruns if verify_reruns is not None else stored["verify_reruns"]
+    else:
+        detect_n = detect_reruns
+        verify_n = verify_reruns
     if not 10 <= detect_n <= 100:
         raise ApiError(422, "invalid_request", "Detection reruns must be between 10 and 100.")
     if not 50 <= verify_n <= settings.verify_reruns_max:
