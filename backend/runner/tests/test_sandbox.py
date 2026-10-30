@@ -36,7 +36,8 @@ TESTS = {
 
         def test_env_is_scrubbed():
             # LC_CTYPE is set by Python's own UTF-8 locale coercion, not passed in.
-            assert set(os.environ) <= {"PATH", "HOME", "PYTHONHASHSEED", "LC_CTYPE",
+            assert set(os.environ) <= {"PATH", "HOME", "PYTHONHASHSEED", "PYTHONPATH",
+                                       "PYTHONDONTWRITEBYTECODE", "LC_CTYPE",
                                        "PYTEST_CURRENT_TEST", "PYTEST_VERSION"}
     """,
 }

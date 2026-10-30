@@ -23,10 +23,10 @@ export function Tooltip({ label, children }) {
       {place ? (
         <span
           role="tooltip"
-          className="pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-md border border-border bg-surface px-2 py-1 text-meta text-ink shadow-menu"
+          className="pointer-events-none fixed z-50 max-w-sm -translate-x-1/2 -translate-y-full break-words rounded-md border border-border bg-surface px-2 py-1 text-left text-meta text-ink shadow-menu"
           style={{ top: place.top, left: place.left }}
         >
-          {label}
+          {typeof label === "string" ? <span className="whitespace-pre-wrap">{label}</span> : label}
         </span>
       ) : null}
     </span>

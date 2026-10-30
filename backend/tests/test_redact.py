@@ -13,10 +13,18 @@ def test_openai_style_key():
 
 
 def test_github_tokens():
-    text = "ghp_abcdefghijklmnopqrstuvwxyzABCD extra github_pat_abcdefghijklmnopqrstuvwxyzABCD"
+    text = (
+        "ghp_abcdefghijklmnopqrstuvwxyzABCD "
+        "gho_abcdefghijklmnopqrstuvwxyzABCD "
+        "ghu_abcdefghijklmnopqrstuvwxyzABCD "
+        "ghs_abcdefghijklmnopqrstuvwxyzABCD "
+        "github_pat_abcdefghijklmnopqrstuvwxyzABCD"
+    )
     out = redact(text)
-    assert "ghp_" not in out and "github_pat_" not in out
-    assert out.count(REDACTED) >= 2
+    assert "ghp_" not in out and "gho_" not in out
+    assert "ghu_" not in out and "ghs_" not in out
+    assert "github_pat_" not in out
+    assert out.count(REDACTED) >= 5
 
 
 def test_aws_access_key():

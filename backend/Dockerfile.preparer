@@ -1,0 +1,28 @@
+FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY preparer/requirements.txt /tmp/preparer-requirements.txt
+RUN pip install -r /tmp/preparer-requirements.txt \
+    && rm /tmp/preparer-requirements.txt
+
+RUN useradd --create-home --uid 10003 preparer \
+    && mkdir -p /repos-data \
+    && chown preparer:preparer /repos-data
+WORKDIR /srv
+
+# Order plugin is copied into each repo venv at prepare time.
+COPY --chown=root:root runner/plugins/deflake_order.py /srv/runner/plugins/deflake_order.py
+COPY --chown=root:root preparer ./preparer
+
+USER preparer
+EXPOSE 8200
+
+CMD ["uvicorn", "preparer.main:app", "--host", "0.0.0.0", "--port", "8200"]

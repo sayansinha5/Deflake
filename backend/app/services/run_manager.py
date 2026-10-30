@@ -19,10 +19,15 @@ log = structlog.get_logger()
 DEFAULT_STEPS = ("detect",)
 
 
-async def _lock_repo(session: AsyncSession, repo_id: str) -> Repo:
-    repo = await session.scalar(select(Repo).where(Repo.id == repo_id).with_for_update())
+async def _lock_repo(session: AsyncSession, repo_id: str, user_id: str | None = None) -> Repo:
+    stmt = select(Repo).where(Repo.id == repo_id).with_for_update()
+    if user_id is not None:
+        from app.services.repos_access import visible_repo_filter
+
+        stmt = stmt.where(visible_repo_filter(user_id))
+    repo = await session.scalar(stmt)
     if repo is None:
-        raise ApiError(404, "repo_not_found", "This repository is not on the allowlist.")
+        raise ApiError(404, "repo_not_found", "This repository was not found.")
     return repo
 
 
@@ -51,7 +56,14 @@ async def start_run(
         raise ApiError(422, "invalid_request",
                        f"Verification reruns must be between 50 and {settings.verify_reruns_max}.")
 
-    await _lock_repo(session, repo_id)
+    repo = await _lock_repo(session, repo_id, user_id)
+    if repo.prepare_status != "ready":
+        raise ApiError(
+            409,
+            "repo_not_ready",
+            "This repository is not ready to scan yet. Wait for prepare to finish.",
+            {"prepare_status": repo.prepare_status},
+        )
     existing = await active_run_for(session, repo_id)
     if existing is not None:
         raise ApiError(409, "run_already_active",

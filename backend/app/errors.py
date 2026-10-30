@@ -61,6 +61,15 @@ async def _rate_limited(request: Request, exc: RateLimitExceeded) -> JSONRespons
     if path.endswith("/auth/register"):
         message = "Too many attempts. Try again in a few minutes."
         code = "too_many_attempts"
+    elif path.endswith("/repos/import"):
+        message = "You've imported 10 repositories in the last hour. Try again later."
+        code = "too_many_imports"
+    elif "/github/oauth/start" in path:
+        message = "You've started GitHub connect too many times. Try again later."
+        code = "too_many_oauth_starts"
+    elif path.endswith("/sync"):
+        message = "You've synced 20 repositories in the last hour. Try again later."
+        code = "too_many_syncs"
     elif "/repos/" in path and path.endswith("/runs"):
         message = "You've started 10 scans in the last hour. Try again later."
         code = "too_many_runs"

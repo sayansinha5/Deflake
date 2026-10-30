@@ -8,11 +8,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import CurrentSession, current_session, get_db, get_settings_dep
 from app.config import Settings
-from app.db.models import Escalation, Flake
+from app.db.models import Escalation, Flake, Repo, Run
 from app.errors import ApiError
 from app.schemas.auth import UUID_PATTERN
 from app.security.ratelimit import limiter
 from app.services.escalation import refresh_escalation
+from app.services.repos_access import get_visible_flake, visible_repo_filter
 
 router = APIRouter(prefix="/escalations", tags=["escalations"])
 
@@ -51,12 +52,15 @@ def _out(row: Escalation, test_id: str) -> EscalationOut:
 
 @router.get("", response_model=list[EscalationOut])
 async def list_escalations(
-    _user: CurrentSession = Depends(current_session),
+    session: CurrentSession = Depends(current_session),
     db: AsyncSession = Depends(get_db),
 ) -> list[EscalationOut]:
     rows = list(await db.execute(
         select(Escalation, Flake.test_id)
         .join(Flake, Flake.id == Escalation.flake_id)
+        .join(Run, Run.id == Flake.run_id)
+        .join(Repo, Repo.id == Run.repo_id)
+        .where(visible_repo_filter(session.user.id))
         .order_by(Escalation.created_at.desc())
         .limit(100)
     ))
@@ -68,14 +72,14 @@ async def list_escalations(
 async def refresh(
     request: Request,
     escalation_id: str = Path(pattern=UUID_PATTERN),
-    _user: CurrentSession = Depends(current_session),
+    session: CurrentSession = Depends(current_session),
     db: AsyncSession = Depends(get_db),
     settings: Settings = Depends(get_settings_dep),
 ) -> EscalationOut:
     row = await db.get(Escalation, escalation_id)
     if row is None:
         raise ApiError(404, "escalation_not_found", "Escalation not found.")
-    flake = await db.get(Flake, row.flake_id)
+    flake = await get_visible_flake(db, row.flake_id, session.user.id)
     try:
         await refresh_escalation(db, settings, row)
         await db.commit()

@@ -43,6 +43,8 @@ services:
         condition: service_healthy
       runner:
         condition: service_healthy
+      preparer:
+        condition: service_healthy
     networks: [default, internal]
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz')"]
@@ -60,12 +62,14 @@ services:
       RUNNER_SHARED_SECRET: ${RUNNER_SHARED_SECRET:-dev_only_runner_secret_change_me_4e91b07d}
       RUNNER_WORKDIR: /work
       RUNNER_REPOS_DIR: /repos
+      RUNNER_REPOS_DATA_DIR: /repos-data
       RUNNER_MAX_PARALLEL: ${RUNNER_MAX_PARALLEL:-4}
       RUNNER_MEM_LIMIT_MB: ${RUNNER_MEM_LIMIT_MB:-1024}
       RUNNER_CPU_SECONDS: ${RUNNER_CPU_SECONDS:-120}
       RUNNER_INTEGRATION: "1"
     volumes:
       - ../demo-repos:/repos:ro
+      - repos-data:/repos-data:ro
     read_only: true
     tmpfs:
       - /work:size=1g,uid=10002,gid=10002,mode=0700
@@ -83,8 +87,38 @@ services:
       retries: 10
       start_period: 10s
 
+  preparer:
+    build:
+      context: .
+      dockerfile: Dockerfile.preparer
+    # Clone + pip install only. No AI, DB, or app secrets. A private-repo token may be
+    # sent per job in the request body and is kept in memory only.
+    environment:
+      PREPARER_SHARED_SECRET: ${PREPARER_SHARED_SECRET:-dev_only_preparer_secret_change_me_9c2d41aa}
+      PREPARER_REPOS_DIR: /repos-data
+    volumes:
+      - repos-data:/repos-data
+    read_only: true
+    tmpfs:
+      - /tmp:size=512m,uid=10003,gid=10003,mode=0700
+      - /home/preparer:size=64m,uid=10003,gid=10003,mode=0700
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 256
+    mem_limit: 2g
+    cpus: 2
+    # Outbound internet for GitHub + PyPI. Not on the internal-only network.
+    networks: [default]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8200/healthz')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
 volumes:
   mysql-data:
+  repos-data:
 
 networks:
   default:

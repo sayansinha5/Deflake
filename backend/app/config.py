@@ -7,6 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 DEV_DEFAULTS: dict[str, str] = {
     "JWT_SECRET": "dev_only_jwt_secret_change_me_7f3a9c2e1b8d4f60",
     "RUNNER_SHARED_SECRET": "dev_only_runner_secret_change_me_4e91b07d",
+    "PREPARER_SHARED_SECRET": "dev_only_preparer_secret_change_me_9c2d41aa",
     "DB_PASSWORD": "deflake_app_dev_pw",
     "DB_MIGRATION_PASSWORD": "deflake_migrator_dev_pw",
     "OWNER_PASSWORD": "Owner2026",
@@ -127,6 +128,23 @@ class Settings(BaseSettings):
     toloka_env: str | None = "sandbox"
     toloka_overlap: int = 3
 
+    # GitHub repository import (public URL and optional OAuth)
+    github_import_enabled: bool = True
+    github_public_token: SecretStr | None = None
+    github_oauth_enabled: bool = False
+    github_oauth_client_id: str | None = None
+    github_oauth_client_secret: SecretStr | None = None
+    github_oauth_redirect_uri: str = "http://localhost:8000/api/github/oauth/callback"
+    github_oauth_scopes: str = "repo read:user"
+    github_oauth_success_url: str = "http://localhost:5173/settings/integration"
+    github_token_encryption_key: SecretStr | None = None
+    preparer_url: str = "http://preparer:8200"
+    preparer_shared_secret: SecretStr
+    repo_max_size_mb: int = 200
+    repo_clone_timeout_s: int = 120
+    prepare_timeout_s: int = 600
+    max_imported_repos_per_user: int = 10
+
     # Runner and run limits
     runner_url: str = "http://runner:8100"
     runner_shared_secret: SecretStr
@@ -200,6 +218,29 @@ class Settings(BaseSettings):
                     raise ConfigError(
                         f"{name.upper()} is required when AI_PROVIDER={self.ai_provider}."
                     )
+
+        if self.github_oauth_enabled:
+            if not self.github_oauth_client_id:
+                raise ConfigError(
+                    "GITHUB_OAUTH_CLIENT_ID is required when GITHUB_OAUTH_ENABLED=true."
+                )
+            if self.github_oauth_client_secret is None:
+                raise ConfigError(
+                    "GITHUB_OAUTH_CLIENT_SECRET is required when GITHUB_OAUTH_ENABLED=true."
+                )
+            if self.github_token_encryption_key is None:
+                raise ConfigError(
+                    "GITHUB_TOKEN_ENCRYPTION_KEY is required when GITHUB_OAUTH_ENABLED=true."
+                )
+            try:
+                from cryptography.fernet import Fernet
+
+                Fernet(self.github_token_encryption_key.get_secret_value().encode("utf-8"))
+            except Exception as exc:
+                raise ConfigError(
+                    "GITHUB_TOKEN_ENCRYPTION_KEY must be a valid Fernet key "
+                    "(generate with: make keys)."
+                ) from exc
 
         if self.is_production:
             jwt = self.jwt_secret.get_secret_value()

@@ -3,13 +3,15 @@ import time
 
 import httpx
 from fastapi import APIRouter, Depends, Path
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import CurrentSession, current_session, get_settings_dep
+from app.api.deps import CurrentSession, current_session, get_db, get_settings_dep
 from app.config import Settings
 from app.errors import ApiError
+from app.services import github_accounts
 
 router = APIRouter(prefix="/settings", tags=["settings"])
-NAMES = {"ai", "tavily", "tendem", "toloka", "runner"}
+NAMES = {"ai", "tavily", "tendem", "toloka", "runner", "preparer"}
 
 
 def _state(configured: bool, enabled: bool = True) -> str:
@@ -18,10 +20,17 @@ def _state(configured: bool, enabled: bool = True) -> str:
     return "configured" if configured else "missing"
 
 
-def _view(settings: Settings) -> dict:
+def _view(settings: Settings, github_connection: dict | None = None) -> dict:
     provider = settings.ai_provider
     ai_label = "Token Factory" if provider == "nebius_token_factory" else "Model provider"
     toloka_on = settings.audit_provider == "toloka"
+    github = {
+        "import_enabled": settings.github_import_enabled,
+        "oauth_enabled": settings.github_oauth_enabled,
+        "connected": False,
+    }
+    if github_connection:
+        github.update(github_connection)
     return {
         "ai_provider": provider,
         "using_token_factory": provider == "nebius_token_factory",
@@ -38,6 +47,7 @@ def _view(settings: Settings) -> dict:
             "escalation_provider": settings.escalation_provider,
             "escalation_fallback": settings.escalation_fallback,
         },
+        "github": github,
         "integrations": [
             {
                 "id": "ai",
@@ -69,36 +79,46 @@ def _view(settings: Settings) -> dict:
                 "status": "configured",
                 "detail": None,
             },
+            {
+                "id": "preparer",
+                "label": "Preparer",
+                "status": _state(True, settings.github_import_enabled),
+                "detail": None,
+            },
         ],
     }
 
 
 @router.get("")
 async def get_settings_view(
-    _user: CurrentSession = Depends(current_session),
+    session: CurrentSession = Depends(current_session),
+    db: AsyncSession = Depends(get_db),
     settings: Settings = Depends(get_settings_dep),
 ) -> dict:
-    return _view(settings)
+    account = await github_accounts.get_active_account(db, session.user.id)
+    return _view(settings, github_accounts.connection_public_view(account))
 
 
 @router.post("/test/{name}")
 async def test_integration(
-    name: str = Path(pattern="^(ai|tavily|tendem|toloka|runner)$"),
+    name: str = Path(pattern="^(ai|tavily|tendem|toloka|runner|preparer)$"),
     _user: CurrentSession = Depends(current_session),
     settings: Settings = Depends(get_settings_dep),
 ) -> dict:
     if name not in NAMES:
         raise ApiError(404, "not_found", "Unknown integration.")
     started = time.perf_counter()
-    if name == "runner":
+    if name in {"runner", "preparer"}:
+        url = settings.runner_url if name == "runner" else settings.preparer_url
+        label = "Runner" if name == "runner" else "Preparer"
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
-                response = await client.get(f"{settings.runner_url}/healthz")
+                response = await client.get(f"{url}/healthz")
             ok = response.status_code == 200
-            message = "Runner responded." if ok else "Runner did not respond."
+            message = f"{label} responded." if ok else f"{label} did not respond."
         except httpx.HTTPError:
             ok = False
-            message = "Runner did not respond."
+            message = f"{label} did not respond."
     else:
         row = next(item for item in _view(settings)["integrations"] if item["id"] == name)
         ok = row["status"] == "configured"

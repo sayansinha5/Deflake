@@ -19,9 +19,31 @@ class RepoOut(BaseModel):
     id: str
     name: str
     description: str
+    source: str = "demo"
+    owner: str | None = None
+    html_url: str | None = None
+    is_private: bool = False
+    commit_sha: str | None = None
+    prepare_status: str = "ready"
+    prepare_error: str | None = None
     test_count: int
     last_scan_at: datetime | None
     last_result: str | None
+    last_prepared_at: datetime | None = None
+    default_branch: str | None = None
+
+
+class ImportRepoIn(StrictModel):
+    url: str = Field(min_length=15, max_length=300)
+
+
+class ImportGithubRepoIn(StrictModel):
+    owner: str = Field(min_length=1, max_length=39)
+    name: str = Field(min_length=1, max_length=100)
+
+
+class ImportRepoOut(RepoOut):
+    already_imported: bool = False
 
 
 class RunSummary(BaseModel):
