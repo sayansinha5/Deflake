@@ -14,6 +14,10 @@ Track: **Coding and Agentic Engineering Track**
 
 License: [Apache-2.0](LICENSE)
 
+
+Demo: [Video Link](https://youtu.be/_emd40-z67Y)
+
+
 ---
 
 Deflake finds flaky tests in a Python project, explains why each one flakes, writes a small fix that has to change the cause, proves the fix with repeated runs, and routes it either to an automatic pull request or to a person.
