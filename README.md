@@ -106,6 +106,12 @@ Deflake runs one loop.
 
 <img src="screenshots/screenshot09.png" alt="Escalations" width="48%">&nbsp;&nbsp;<img src="screenshots/screenshot10.png" alt="Repositories" width="48%">
 
+<img src="screenshots/screenshot11.png" alt="Escalations" width="48%">&nbsp;&nbsp;<img src="screenshots/screenshot12.png" alt="Repositories" width="48%">
+
+<img src="screenshots/screenshot13.png" alt="Escalations" width="48%">&nbsp;&nbsp;<img src="screenshots/screenshot14.png" alt="Repositories" width="48%">
+
+<img src="screenshots/screenshot15.png" alt="Escalations" width="48%">&nbsp;&nbsp;<img src="screenshots/screenshot16.png" alt="Repositories" width="48%">
+
 ![Sign in](screenshots/screenshot01.png)
 
 
