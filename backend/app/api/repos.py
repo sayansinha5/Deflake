@@ -9,7 +9,8 @@ from app.errors import ApiError
 from app.schemas.runs import REPO_ID, ImportGithubRepoIn, ImportRepoIn, ImportRepoOut, RepoOut
 from app.security.ratelimit import limiter
 from app.services import import_repos
-from app.services.repos_access import get_visible_repo, visible_repo_filter
+from app.services.allowlist import ensure_demo_repos_for_user
+from app.services.repos_access import get_visible_repo, visible_repo_filter, visible_run_filter
 
 router = APIRouter(prefix="/repos", tags=["repos"])
 
@@ -24,6 +25,8 @@ def _repo_out(repo: Repo, latest: dict[str, Run]) -> RepoOut:
         owner=repo.owner,
         html_url=repo.html_url,
         is_private=repo.is_private,
+        is_personal=bool(repo.is_personal),
+        workspace_id=repo.workspace_id,
         commit_sha=repo.commit_sha,
         prepare_status=repo.prepare_status,
         prepare_error=repo.prepare_error,
@@ -35,12 +38,14 @@ def _repo_out(repo: Repo, latest: dict[str, Run]) -> RepoOut:
     )
 
 
-async def _latest_by_repo(db: AsyncSession, repos: list[Repo]) -> dict[str, Run]:
+async def _latest_by_repo(db: AsyncSession, repos: list[Repo], user_id: str) -> dict[str, Run]:
     latest: dict[str, Run] = {}
     if not repos:
         return latest
     runs = list(await db.scalars(
-        select(Run).where(Run.repo_id.in_([r.id for r in repos]))
+        select(Run)
+        .where(Run.repo_id.in_([r.id for r in repos]))
+        .where(visible_run_filter(user_id))
         .order_by(Run.created_at.desc())
     ))
     for run in runs:
@@ -52,11 +57,14 @@ async def _latest_by_repo(db: AsyncSession, repos: list[Repo]) -> dict[str, Run]
 async def list_repos(
     session: CurrentSession = Depends(current_session),
     db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings_dep),
 ) -> list[RepoOut]:
+    await ensure_demo_repos_for_user(db, settings, session.user.id)
+    await db.commit()
     repos = list(await db.scalars(
         select(Repo).where(visible_repo_filter(session.user.id)).order_by(Repo.name)
     ))
-    latest = await _latest_by_repo(db, repos)
+    latest = await _latest_by_repo(db, repos, session.user.id)
     return [_repo_out(r, latest) for r in repos]
 
 
@@ -70,11 +78,11 @@ async def import_public_repo(
     settings: Settings = Depends(get_settings_dep),
 ) -> ImportRepoOut:
     repo, already = await import_repos.import_public_url(
-        db, settings, session.user.id, body.url,
+        db, settings, session.user.id, body.url, personal=body.personal,
     )
     if not already:
         import_repos.schedule_prepare(request.app.state, settings, repo.id)
-    latest = await _latest_by_repo(db, [repo])
+    latest = await _latest_by_repo(db, [repo], session.user.id)
     base = _repo_out(repo, latest)
     return ImportRepoOut(**base.model_dump(), already_imported=already)
 
@@ -89,7 +97,7 @@ async def import_github_repo(
     settings: Settings = Depends(get_settings_dep),
 ) -> ImportRepoOut:
     repo, already, token = await import_repos.import_from_github(
-        db, settings, session.user.id, body.owner, body.name,
+        db, settings, session.user.id, body.owner, body.name, personal=body.personal,
     )
     try:
         if not already:
@@ -98,7 +106,7 @@ async def import_github_repo(
             )
     finally:
         token = None
-    latest = await _latest_by_repo(db, [repo])
+    latest = await _latest_by_repo(db, [repo], session.user.id)
     base = _repo_out(repo, latest)
     return ImportRepoOut(**base.model_dump(), already_imported=already)
 
@@ -121,7 +129,7 @@ async def sync_repo(
         )
     finally:
         token = None
-    latest = await _latest_by_repo(db, [repo])
+    latest = await _latest_by_repo(db, [repo], session.user.id)
     return _repo_out(repo, latest)
 
 
@@ -146,5 +154,5 @@ async def get_repo(
     db: AsyncSession = Depends(get_db),
 ) -> RepoOut:
     repo = await get_visible_repo(db, repo_id, session.user.id)
-    latest = await _latest_by_repo(db, [repo])
+    latest = await _latest_by_repo(db, [repo], session.user.id)
     return _repo_out(repo, latest)

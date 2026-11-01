@@ -16,7 +16,7 @@ from app.schemas.runs import REPO_ID, CursorPage, FlakeOut, RunStarted, RunSumma
 from app.security.ratelimit import limiter
 from app.services import run_manager
 from app.services.events import events_after
-from app.services.repos_access import get_visible_run, visible_repo_filter
+from app.services.repos_access import get_visible_run, visible_repo_filter, visible_run_filter
 
 router = APIRouter(tags=["runs"])
 HEARTBEAT_S = 15
@@ -67,6 +67,7 @@ async def list_runs(
         select(Run)
         .join(Repo, Repo.id == Run.repo_id)
         .where(visible_repo_filter(session.user.id))
+        .where(visible_run_filter(session.user.id))
         .order_by(Run.created_at.desc(), Run.id.desc())
     )
     if repo_id:
@@ -77,6 +78,7 @@ async def list_runs(
             .join(Repo, Repo.id == Run.repo_id)
             .where(Run.id == cursor)
             .where(visible_repo_filter(session.user.id))
+            .where(visible_run_filter(session.user.id))
         )
         if current is not None:
             stmt = stmt.where(

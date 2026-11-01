@@ -57,6 +57,69 @@ class RevokedSession(Base):
     expires_at: Mapped[datetime] = mapped_column(DATETIME(fsp=6), nullable=False)
 
 
+class Workspace(Base):
+    __tablename__ = "workspaces"
+    __table_args__ = (Index("ix_workspaces_created_by", "created_by"),)
+
+    id: Mapped[str] = mapped_column(CHAR(36), primary_key=True, default=new_id)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    created_by: Mapped[str] = mapped_column(CHAR(36), ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DATETIME(fsp=6), nullable=False, default=utcnow)
+
+
+class WorkspaceMember(Base):
+    __tablename__ = "workspace_members"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "user_id", name="uq_workspace_members_workspace_user"),
+        Index("ix_workspace_members_user_id", "user_id"),
+    )
+
+    id: Mapped[str] = mapped_column(CHAR(36), primary_key=True, default=new_id)
+    workspace_id: Mapped[str] = mapped_column(CHAR(36), ForeignKey("workspaces.id"), nullable=False)
+    user_id: Mapped[str] = mapped_column(CHAR(36), ForeignKey("users.id"), nullable=False)
+    role: Mapped[str] = mapped_column(String(16), nullable=False, default="member")
+    created_at: Mapped[datetime] = mapped_column(DATETIME(fsp=6), nullable=False, default=utcnow)
+
+
+class WorkspaceInvite(Base):
+    __tablename__ = "workspace_invites"
+    __table_args__ = (
+        UniqueConstraint("token", name="uq_workspace_invites_token"),
+        Index("ix_workspace_invites_email", "email"),
+        Index("ix_workspace_invites_workspace_id", "workspace_id"),
+    )
+
+    id: Mapped[str] = mapped_column(CHAR(36), primary_key=True, default=new_id)
+    workspace_id: Mapped[str] = mapped_column(CHAR(36), ForeignKey("workspaces.id"), nullable=False)
+    email: Mapped[str] = mapped_column(String(254), nullable=False)
+    first_name: Mapped[str | None] = mapped_column(String(60))
+    last_name: Mapped[str | None] = mapped_column(String(60))
+    token: Mapped[str] = mapped_column(String(64), nullable=False)
+    invited_by: Mapped[str] = mapped_column(CHAR(36), ForeignKey("users.id"), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    created_at: Mapped[datetime] = mapped_column(DATETIME(fsp=6), nullable=False, default=utcnow)
+    accepted_at: Mapped[datetime | None] = mapped_column(DATETIME(fsp=6))
+    accepted_by: Mapped[str | None] = mapped_column(CHAR(36), ForeignKey("users.id"))
+
+
+class Notification(Base):
+    __tablename__ = "notifications"
+    __table_args__ = (
+        Index("ix_notifications_user_created", "user_id", "created_at"),
+        Index("ix_notifications_user_unread", "user_id", "read_at"),
+    )
+
+    id: Mapped[str] = mapped_column(CHAR(36), primary_key=True, default=new_id)
+    user_id: Mapped[str] = mapped_column(CHAR(36), ForeignKey("users.id"), nullable=False)
+    type: Mapped[str] = mapped_column(String(64), nullable=False)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    link: Mapped[str | None] = mapped_column(String(512))
+    data: Mapped[dict | None] = mapped_column(JSON)
+    read_at: Mapped[datetime | None] = mapped_column(DATETIME(fsp=6))
+    created_at: Mapped[datetime] = mapped_column(DATETIME(fsp=6), nullable=False, default=utcnow)
+
+
 class SecurityLog(Base):
     __tablename__ = "security_log"
     __table_args__ = (Index("ix_security_log_created_at", "created_at"),)
@@ -116,6 +179,8 @@ class Repo(Base):
     prepare_error: Mapped[str | None] = mapped_column(MEDIUMTEXT)
     last_prepared_at: Mapped[datetime | None] = mapped_column(DATETIME(fsp=6))
     created_by: Mapped[str | None] = mapped_column(CHAR(36), ForeignKey("users.id"))
+    is_personal: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    workspace_id: Mapped[str | None] = mapped_column(CHAR(36), ForeignKey("workspaces.id"))
     updated_at: Mapped[datetime] = mapped_column(DATETIME(fsp=6), nullable=False, default=utcnow)
 
 

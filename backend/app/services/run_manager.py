@@ -10,6 +10,7 @@ from app.db.models import Flake, Repo, Run, utcnow
 from app.errors import ApiError
 from app.runner_client import RunnerClient
 from app.security.redact import redact
+from app.services.allowlist import runner_repo_key
 from app.services.detect import SuiteStartError, detect, store_findings, store_outcomes
 from app.services.events import ACTIVE, append_event, empty_steps
 from app.services.stats import rarest_detectable_rate
@@ -152,14 +153,15 @@ async def execute_run(maker: async_sessionmaker[AsyncSession], settings: Setting
         _step(run, "detect", status="running", started_at=run.started_at.isoformat())
         await append_event(session, run, "run.status", {"status": "running"})
         await append_event(session, run, "step.started", {"step": "detect"})
+        repo = await session.get(Repo, run.repo_id)
+        runner_key = runner_repo_key(repo) if repo is not None else run.repo_id
         await session.commit()
-        repo_id = run.repo_id
         detect_n = int(run.config["detect_reruns"])
         timeout_s = int(run.config["timeout_s"])
 
     try:
         summary = None
-        async for progress in detect(client, repo_id, detect_n, timeout_s,
+        async for progress in detect(client, runner_key, detect_n, timeout_s,
                                      settings.runner_batch_size):
             async with maker() as session:
                 run = await session.get(Run, run_id)

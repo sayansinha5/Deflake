@@ -2,12 +2,13 @@
 import structlog
 from sqlalchemy import select
 
-from app.db.models import Evidence, Flake, Run, TestOutcome, utcnow
+from app.db.models import Evidence, Flake, Repo, Run, TestOutcome, utcnow
 from app.graph.context import current_context
 from app.graph.gates import gate
 from app.graph.nodes.common import note_error
 from app.graph.state import FlakeState
 from app.security.redact import redact
+from app.services.allowlist import runner_repo_key
 from app.services.bisection import (
     GATE_STOPS,
     MAX_CALLS,
@@ -212,7 +213,8 @@ async def bisect_polluter(state: FlakeState) -> dict:
         else:
             skip = False
             victim = flake.test_id
-            repo_id = run.repo_id
+            repo = await session.get(Repo, run.repo_id)
+            repo_id = runner_repo_key(repo) if repo is not None else run.repo_id
             candidates = await _candidates(session, run_id, flake_id, victim)
             await append_event(session, run, "step.started", {
                 "step": "bisect", "flake_id": flake.id,

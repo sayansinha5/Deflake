@@ -4,6 +4,7 @@ import { Link, useNavigate } from "react-router-dom";
 
 import { useAuth } from "../../hooks/useAuth";
 import { Badge } from "../ui/Badge";
+import { NotificationBell } from "./NotificationBell";
 
 function initials(name) {
   return name
@@ -127,6 +128,7 @@ export function TopBar({ title, onMenu, activeRun, tokenFactory = true }) {
           </Link>
         ) : null}
         {tokenFactory ? null : <Badge tone="warning">Not using Nebius Token Factory</Badge>}
+        <NotificationBell />
         <AccountMenu />
       </div>
     </header>

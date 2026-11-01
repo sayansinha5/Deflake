@@ -68,6 +68,9 @@ async def current_session(
 
 
 async def require_owner(session: CurrentSession = Depends(current_session)) -> CurrentSession:
-    if session.user.role != "owner" or not session.claims.is_admin:
+    # Role comes from the database (loaded with the session). Do not also require
+    # claims.is_admin — that flag is set at login and goes stale after onboarding
+    # promotes a member to owner until the cookie is re-issued.
+    if session.user.role != "owner":
         raise ApiError(403, "forbidden", "Only the workspace owner can do this.")
     return session

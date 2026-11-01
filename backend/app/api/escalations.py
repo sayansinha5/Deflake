@@ -13,7 +13,7 @@ from app.errors import ApiError
 from app.schemas.auth import UUID_PATTERN
 from app.security.ratelimit import limiter
 from app.services.escalation import refresh_escalation
-from app.services.repos_access import get_visible_flake, visible_repo_filter
+from app.services.repos_access import get_visible_flake, visible_repo_filter, visible_run_filter
 
 router = APIRouter(prefix="/escalations", tags=["escalations"])
 
@@ -61,6 +61,7 @@ async def list_escalations(
         .join(Run, Run.id == Flake.run_id)
         .join(Repo, Repo.id == Run.repo_id)
         .where(visible_repo_filter(session.user.id))
+        .where(visible_run_filter(session.user.id))
         .order_by(Escalation.created_at.desc())
         .limit(100)
     ))

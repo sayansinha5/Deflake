@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import CurrentSession, current_session, get_db
 from app.db.models import LlmCall, Repo, Run
-from app.services.repos_access import visible_repo_filter
+from app.services.repos_access import visible_repo_filter, visible_run_filter
 
 router = APIRouter(prefix="/usage", tags=["usage"])
 
@@ -77,6 +77,7 @@ async def get_usage(
             .join(Repo, Repo.id == Run.repo_id)
             .where(Run.id.in_(list(by_run)))
             .where(visible_repo_filter(session.user.id))
+            .where(visible_run_filter(session.user.id))
         ))
         visible_run_ids = {row.id for row in rows}
         repos = {row.id: row.repo_id for row in rows}

@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { Menu as MenuIcon } from "lucide-react";
-import { NavLink, Outlet, useLocation, useNavigate, useOutletContext, useSearchParams } from "react-router-dom";
+import { ChevronRight, Menu as MenuIcon } from "lucide-react";
+import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate, useOutletContext, useParams, useSearchParams } from "react-router-dom";
 
 import { PageHeader } from "../components/layout/PageHeader";
 import { useShell } from "../components/layout/shell";
+import { NotificationBell } from "../components/layout/NotificationBell";
 import { AccountMenu } from "../components/layout/TopBar";
 import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
@@ -15,6 +16,10 @@ import { useAuth } from "../hooks/useAuth";
 import { api, normalizeError } from "../lib/api";
 import { apiBaseUrl } from "../lib/config";
 import { formatMoney } from "../lib/format";
+import { EmailInput, inputClass } from "./authFields";
+
+const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+const emptyInviteDraft = () => ({ first_name: "", last_name: "", email: "" });
 
 const GITHUB_BANNER = {
   connected: { tone: "success", message: "GitHub connected." },
@@ -36,16 +41,17 @@ export function Settings() {
   const { openMenu } = useShell();
   const { push } = useToast();
   const location = useLocation();
+  const navigate = useNavigate();
   const [view, setView] = useState(null);
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(null);
-  const [members, setMembers] = useState(null);
-  const [memberError, setMemberError] = useState(null);
-  const [target, setTarget] = useState(null);
+  const [membersTrail, setMembersTrail] = useState(null);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [saving, setSaving] = useState(false);
   const owner = user?.role === "owner";
+  const onMembers = location.pathname === "/settings/members"
+    || location.pathname.startsWith("/settings/members/");
 
   const load = useCallback(async () => {
     setError(null);
@@ -62,17 +68,11 @@ export function Settings() {
   }, [load]);
 
   useEffect(() => {
-    if (!owner) return undefined;
-    let live = true;
-    api.get("/members").then((response) => {
-      if (live) setMembers(response.data);
-    }).catch((err) => {
-      if (live) setMemberError(err.normalized || normalizeError(err));
-    });
-    return () => {
-      live = false;
-    };
-  }, [owner]);
+    const message = location.state?.toast;
+    if (!message) return;
+    push({ message });
+    navigate(location.pathname, { replace: true, state: {} });
+  }, [location.pathname, location.state, navigate, push]);
 
   async function test(id) {
     setBusy(id);
@@ -103,20 +103,13 @@ export function Settings() {
     }
   }
 
-  async function deactivate() {
-    if (!target) return;
-    try {
-      const response = await api.post(`/members/${target.id}/deactivate`);
-      setMembers((current) => (current || []).map((row) => (row.id === response.data.id ? response.data : row)));
-      setTarget(null);
-      push({ message: "Member deactivated." });
-    } catch (err) {
-      const normalized = err.normalized || normalizeError(err);
-      push({ tone: "error", message: normalized.message });
-    }
-  }
+  const current = MENUS.find((item) => (
+    item.id === "members" ? onMembers : location.pathname === item.to
+  )) || MENUS[0];
 
-  const current = MENUS.find((item) => location.pathname === item.to) || MENUS[0];
+  useEffect(() => {
+    if (!onMembers) setMembersTrail(null);
+  }, [onMembers]);
 
   return (
     <div className="absolute inset-0 flex min-h-0 bg-surface">
@@ -133,6 +126,7 @@ export function Settings() {
             <NavLink
               key={item.id}
               to={item.to}
+              end={item.id !== "members"}
               className={({ isActive }) => (isActive
                 ? "rounded-md bg-ice px-3 py-2 text-left text-sm font-medium !text-ink !no-underline hover:!bg-ice hover:!text-ink"
                 : "rounded-md px-3 py-2 text-left text-sm font-medium !text-ink-secondary !no-underline hover:!bg-sunken hover:!text-ink")}
@@ -144,8 +138,24 @@ export function Settings() {
       </aside>
       <section className="flex min-h-0 min-w-0 flex-1 flex-col">
         <header className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border px-4 sm:px-6">
-          <h2 className="truncate text-sm font-semibold text-ink">{current.label}</h2>
-          <AccountMenu />
+          {membersTrail ? (
+            <h2 className="flex min-w-0 items-center gap-1.5 text-sm font-semibold text-ink">
+              <Link
+                to="/settings/members"
+                className="shrink-0 font-medium text-ink-secondary underline decoration-dashed decoration-gray-300 underline-offset-4 hover:text-ink"
+              >
+                Members
+              </Link>
+              <ChevronRight size={14} strokeWidth={1.75} className="shrink-0 text-ink-muted" aria-hidden="true" />
+              <span className="truncate">{membersTrail}</span>
+            </h2>
+          ) : (
+            <h2 className="truncate text-sm font-semibold text-ink">{current.label}</h2>
+          )}
+          <div className="flex items-center gap-3">
+            <NotificationBell />
+            <AccountMenu />
+          </div>
         </header>
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6">
           {error ? (
@@ -166,9 +176,7 @@ export function Settings() {
               owner,
               busy,
               test,
-              members,
-              memberError,
-              setTarget,
+              setMembersTrail,
               currentPassword,
               setCurrentPassword,
               newPassword,
@@ -180,18 +188,6 @@ export function Settings() {
           ) : null}
         </div>
       </section>
-      <Dialog
-        open={Boolean(target)}
-        onOpenChange={(next) => { if (!next) setTarget(null); }}
-        title="Deactivate this member?"
-        description={target ? `${target.full_name} will not be able to sign in.` : ""}
-        footer={(
-          <>
-            <Button variant="secondary" onClick={() => setTarget(null)}>Keep active</Button>
-            <Button variant="danger" onClick={deactivate}>Deactivate</Button>
-          </>
-        )}
-      />
     </div>
   );
 }
@@ -503,45 +499,437 @@ export function SettingsAccount() {
   );
 }
 
-function MemberCard({ member, onDeactivate }) {
+function MemberCard({ member, onRemove }) {
   return (
     <article className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-white px-4 py-3">
       <div className="min-w-0">
         <p className="text-sm font-medium text-ink">{member.full_name}</p>
         <p className="truncate text-xs text-ink-secondary">{member.email}</p>
       </div>
-      <div className="flex items-center gap-2">
-        <Badge tone={member.is_active ? "success" : "neutral"}>{member.is_active ? "Active" : "Inactive"}</Badge>
-        {onDeactivate ? <Button variant="danger" onClick={() => onDeactivate(member)}>Deactivate</Button> : null}
-      </div>
+      {onRemove ? (
+        <button
+          type="button"
+          onClick={() => onRemove(member)}
+          className="rounded-md bg-red-50 px-3 py-2 text-sm font-medium text-red-400 transition hover:bg-red-100 hover:text-red-700"
+        >
+          Remove
+        </button>
+      ) : null}
     </article>
   );
 }
 
-export function SettingsMembers() {
-  const { user, owner, members, memberError, setTarget } = useOutletContext();
-  if (!owner) {
-    return <p className="w-full max-w-2xl text-sm text-ink-secondary">Only the owner can manage members.</p>;
+function WorkspaceCard({ title, subtitle, onOpen }) {
+  if (!onOpen) {
+    return (
+      <div className="rounded-md border border-border bg-white px-4 py-3">
+        <p className="truncate text-sm font-medium text-ink">{title}</p>
+        {subtitle ? <p className="mt-0.5 truncate text-xs text-ink-secondary">{subtitle}</p> : null}
+      </div>
+    );
   }
-  const owners = (members || []).filter((member) => member.role === "owner");
-  const team = (members || []).filter((member) => member.role !== "owner");
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="group flex w-full cursor-pointer items-center justify-between gap-3 rounded-md border border-border bg-white px-4 py-3 text-left transition hover:border-border-strong hover:bg-ice focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+    >
+      <div className="min-w-0">
+        <p className="truncate text-sm font-medium text-ink group-hover:underline group-hover:decoration-dashed group-hover:underline-offset-4">{title}</p>
+        {subtitle ? <p className="mt-0.5 truncate text-xs text-ink-secondary">{subtitle}</p> : null}
+      </div>
+      <span
+        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-sunken text-ink-muted transition group-hover:bg-border-strong group-hover:text-ink"
+        aria-hidden="true"
+      >
+        <ChevronRight size={16} strokeWidth={1.75} />
+      </span>
+    </button>
+  );
+}
+
+export function SettingsMembers() {
+  const { user, owner, setMembersTrail } = useOutletContext();
+  const { workspaceId } = useParams();
+  const navigate = useNavigate();
+  const { push } = useToast();
+  const [list, setList] = useState(null);
+  const [listError, setListError] = useState(null);
+  const [workspace, setWorkspace] = useState(null);
+  const [workspaceError, setWorkspaceError] = useState(null);
+  const [members, setMembers] = useState(null);
+  const [memberError, setMemberError] = useState(null);
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteDraft, setInviteDraft] = useState(emptyInviteDraft);
+  const [inviteDraftError, setInviteDraftError] = useState("");
+  const [inviting, setInviting] = useState(false);
+  const [leaveOpen, setLeaveOpen] = useState(false);
+  const [leaving, setLeaving] = useState(false);
+  const [removeTarget, setRemoveTarget] = useState(null);
+  const [removing, setRemoving] = useState(false);
+
+  const loadList = useCallback(() => {
+    setListError(null);
+    api.get("/workspaces").then((response) => {
+      setList(response.data);
+    }).catch((err) => {
+      setListError(err.normalized || normalizeError(err));
+    });
+  }, []);
+
+  useEffect(() => {
+    if (workspaceId) return undefined;
+    loadList();
+    return undefined;
+  }, [workspaceId, loadList]);
+
+  useEffect(() => {
+    if (!workspaceId) {
+      setWorkspace(null);
+      setMembers(null);
+      setWorkspaceError(null);
+      setMemberError(null);
+      if (typeof setMembersTrail === "function") setMembersTrail(null);
+      return undefined;
+    }
+    let live = true;
+    setWorkspace(null);
+    setMembers(null);
+    setWorkspaceError(null);
+    setMemberError(null);
+    api.get(`/workspaces/${workspaceId}`).then((response) => {
+      if (!live) return;
+      setWorkspace(response.data);
+      if (typeof setMembersTrail === "function") setMembersTrail(response.data.name);
+    }).catch((err) => {
+      if (!live) return;
+      setWorkspaceError(err.normalized || normalizeError(err));
+      if (typeof setMembersTrail === "function") setMembersTrail(null);
+    });
+    api.get(`/workspaces/${workspaceId}/members`).then((response) => {
+      if (live) setMembers(response.data);
+    }).catch((err) => {
+      if (live) setMemberError(err.normalized || normalizeError(err));
+    });
+    return () => {
+      live = false;
+      if (typeof setMembersTrail === "function") setMembersTrail(null);
+    };
+  }, [workspaceId, setMembersTrail]);
+
+  function openInviteModal() {
+    setInviteDraft(emptyInviteDraft());
+    setInviteDraftError("");
+    setInviteOpen(true);
+  }
+
+  async function sendInvite() {
+    if (workspace?.role !== "owner") return;
+    const email = inviteDraft.email.trim().toLowerCase();
+    if (!EMAIL.test(email)) {
+      setInviteDraftError("Enter a valid email.");
+      return;
+    }
+    if ((members || []).some((row) => row.email.toLowerCase() === email)) {
+      setInviteDraftError("That person is already in this workspace.");
+      return;
+    }
+    setInviting(true);
+    setInviteDraftError("");
+    try {
+      const response = await api.post("/workspaces/invites", {
+        email,
+        first_name: inviteDraft.first_name.trim() || null,
+        last_name: inviteDraft.last_name.trim() || null,
+      });
+      push({
+        message: `Invite ready for ${response.data.email}. Share the link from your notifications if they are new to Deflake.`,
+      });
+      setInviteDraft(emptyInviteDraft());
+      setInviteOpen(false);
+      const refreshed = await api.get(`/workspaces/${workspaceId}/members`);
+      setMembers(refreshed.data);
+    } catch (err) {
+      const normalized = err.normalized || normalizeError(err);
+      setInviteDraftError(normalized.message);
+    } finally {
+      setInviting(false);
+    }
+  }
+
+  async function confirmLeave() {
+    if (!workspaceId) return;
+    setLeaving(true);
+    try {
+      await api.post(`/workspaces/${workspaceId}/leave`);
+      setLeaveOpen(false);
+      push({ message: `Left ${workspace?.name || "workspace"}.` });
+      navigate("/settings/members");
+    } catch (err) {
+      const normalized = err.normalized || normalizeError(err);
+      push({ tone: "error", message: normalized.message });
+    } finally {
+      setLeaving(false);
+    }
+  }
+
+  async function confirmRemove() {
+    if (!workspaceId || !removeTarget) return;
+    setRemoving(true);
+    try {
+      await api.delete(`/workspaces/${workspaceId}/members/${removeTarget.id}`);
+      setMembers((current) => (current || []).filter((row) => row.id !== removeTarget.id));
+      push({ message: `${removeTarget.full_name} was removed from the workspace.` });
+      setRemoveTarget(null);
+    } catch (err) {
+      const normalized = err.normalized || normalizeError(err);
+      push({ tone: "error", message: normalized.message });
+    } finally {
+      setRemoving(false);
+    }
+  }
+
+  if (workspaceId) {
+    const owners = (members || []).filter((member) => member.role === "owner");
+    const team = (members || []).filter((member) => member.role !== "owner");
+    const canManage = workspace?.role === "owner" && owner;
+    const canLeave = workspace?.role === "member";
+
+    return (
+      <div className="w-full max-w-2xl">
+        {workspaceError ? (
+          <ErrorState
+            message={workspaceError.message}
+            requestId={workspaceError.requestId}
+            onRetry={() => navigate("/settings/members")}
+          />
+        ) : null}
+        {!workspace && !workspaceError ? <SkeletonRows /> : null}
+        {workspace ? (
+          <>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h3 className="flex items-center space-x-2 text-lg font-semibold text-ink">
+                <span>{workspace.name}</span>
+                {workspace.role === "owner" ? (
+                  <Badge tone="accent" className="text-sm">Owner</Badge>
+                ) : null}
+              </h3>
+              {canLeave ? (
+                <button
+                  type="button"
+                  onClick={() => setLeaveOpen(true)}
+                  className="rounded-md bg-red-50 px-3 py-2 text-sm font-medium text-red-400 transition hover:bg-red-100 hover:text-red-700"
+                >
+                  Leave Workspace
+                </button>
+              ) : null}
+            </div>
+
+            {canManage ? (
+              <div className="mt-8 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h4 className="text-sm font-semibold text-ink-secondary">Invite team</h4>
+                  <p className="mt-1 text-xs text-ink-secondary">
+                    Add teammates by email so they can join this workspace.
+                  </p>
+                </div>
+                <Button type="button" variant="secondary" onClick={openInviteModal}>
+                  + New Invite
+                </Button>
+              </div>
+            ) : null}
+
+            {memberError ? (
+              <div className="mt-6">
+                <ErrorState message={memberError.message} requestId={memberError.requestId} />
+              </div>
+            ) : null}
+            {!members && !memberError ? (
+              <div className="mt-6">
+                <SkeletonRows />
+              </div>
+            ) : null}
+            {members ? (
+              <>
+                <h4 className="mt-8 text-sm font-semibold text-ink-secondary">Owner</h4>
+                <div className="mt-3 flex flex-col gap-2">
+                  {owners.map((member) => <MemberCard key={member.id} member={member} />)}
+                  {owners.length === 0 ? (
+                    <p className="text-sm text-ink-secondary">No owner listed.</p>
+                  ) : null}
+                </div>
+                <h4 className="mt-8 text-sm font-semibold text-ink-secondary">Members</h4>
+                <div className="mt-3 flex flex-col gap-2">
+                  {team.length === 0 ? (
+                    <p className="text-sm text-ink-secondary">No other members yet.</p>
+                  ) : null}
+                  {team.map((member) => (
+                    <MemberCard
+                      key={member.id}
+                      member={member}
+                      onRemove={
+                        canManage && member.id !== user?.id
+                          ? setRemoveTarget
+                          : null
+                      }
+                    />
+                  ))}
+                </div>
+              </>
+            ) : null}
+          </>
+        ) : null}
+
+        <Dialog
+          open={inviteOpen}
+          onOpenChange={(next) => {
+            if (inviting) return;
+            setInviteOpen(next);
+            if (!next) {
+              setInviteDraft(emptyInviteDraft());
+              setInviteDraftError("");
+            }
+          }}
+          title="New invite"
+          footer={(
+            <>
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={inviting}
+                onClick={() => {
+                  setInviteOpen(false);
+                  setInviteDraft(emptyInviteDraft());
+                  setInviteDraftError("");
+                }}
+              >
+                Cancel
+              </Button>
+              <Button type="button" busy={inviting} onClick={sendInvite}>+ Add person</Button>
+            </>
+          )}
+        >
+          <div className="mt-8 flex flex-col gap-3">
+            {inviteDraftError ? (
+              <p className="text-center text-sm text-danger" role="alert">{inviteDraftError}</p>
+            ) : null}
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="flex flex-col gap-1.5 text-sm text-ink-secondary">
+                First name
+                <input
+                  className={inputClass}
+                  value={inviteDraft.first_name}
+                  onChange={(event) => setInviteDraft((current) => ({
+                    ...current,
+                    first_name: event.target.value,
+                  }))}
+                />
+              </label>
+              <label className="flex flex-col gap-1.5 text-sm text-ink-secondary">
+                Last name
+                <input
+                  className={inputClass}
+                  value={inviteDraft.last_name}
+                  onChange={(event) => setInviteDraft((current) => ({
+                    ...current,
+                    last_name: event.target.value,
+                  }))}
+                />
+              </label>
+            </div>
+            <label className="mt-4 flex flex-col gap-1.5 text-sm text-ink-secondary">
+              <span className="inline-flex items-center space-x-2">
+                <span>Email</span>
+                <span className="text-danger" aria-hidden="true">*</span>
+              </span>
+              <EmailInput
+                value={inviteDraft.email}
+                onChange={(event) => setInviteDraft((current) => ({
+                  ...current,
+                  email: event.target.value,
+                }))}
+                required
+              />
+            </label>
+          </div>
+        </Dialog>
+        <Dialog
+          open={leaveOpen}
+          onOpenChange={(next) => { if (!next && !leaving) setLeaveOpen(false); }}
+          title="Leave this workspace?"
+          description={
+            workspace
+              ? `You will lose access to “${workspace.name}” and its shared repositories until you are invited again.`
+              : ""
+          }
+          footer={(
+            <>
+              <Button variant="secondary" disabled={leaving} onClick={() => setLeaveOpen(false)}>Stay</Button>
+              <Button variant="danger" busy={leaving} onClick={confirmLeave}>Leave Workspace</Button>
+            </>
+          )}
+        />
+        <Dialog
+          open={Boolean(removeTarget)}
+          onOpenChange={(next) => { if (!next && !removing) setRemoveTarget(null); }}
+          title="Remove this member?"
+          description={
+            removeTarget
+              ? `${removeTarget.full_name} will lose access to “${workspace?.name || "this workspace"}” and its shared repositories.`
+              : ""
+          }
+          footer={(
+            <>
+              <Button variant="secondary" disabled={removing} onClick={() => setRemoveTarget(null)}>Cancel</Button>
+              <Button variant="danger" busy={removing} onClick={confirmRemove}>Remove</Button>
+            </>
+          )}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="w-full max-w-2xl">
-      {memberError ? <ErrorState message={memberError.message} requestId={memberError.requestId} /> : null}
-      {!members && !memberError ? <SkeletonRows /> : null}
-      {members ? (
+      {listError ? <ErrorState message={listError.message} requestId={listError.requestId} onRetry={loadList} /> : null}
+      {!list && !listError ? <SkeletonRows /> : null}
+      {list ? (
         <>
-          <h3 className="text-lg font-semibold text-gray-600">Owner</h3>
+          <h3 className="text-lg font-semibold text-ink">Your Workspace</h3>
           <div className="mt-3 flex flex-col gap-2">
-            {owners.map((member) => <MemberCard key={member.id} member={member} />)}
+            <WorkspaceCard
+              title="Personal"
+              subtitle="Only you. Personal repositories stay private"
+            />
+            {list.owned ? (
+              <WorkspaceCard
+                title={list.owned.name}
+                subtitle={`${list.owned.member_count} member${list.owned.member_count === 1 ? "" : "s"}`}
+                onOpen={() => navigate(`/settings/members/${list.owned.id}`)}
+              />
+            ) : (
+              <div className="rounded-md border border-dashed border-border bg-white px-4 py-3">
+                <p className="text-sm font-medium text-ink">No owned workspace yet</p>
+                <p className="mt-0.5 text-xs text-ink-secondary">
+                  Finish onboarding to create a workspace you own.
+                </p>
+              </div>
+            )}
           </div>
-          <h3 className="mt-8 text-lg font-semibold text-gray-600">Teams</h3>
+
+          <h3 className="mt-8 text-lg font-semibold text-ink">Member of Workspace</h3>
           <div className="mt-3 flex flex-col gap-2">
-            {team.map((member) => (
-              <MemberCard
-                key={member.id}
-                member={member}
-                onDeactivate={member.id !== user?.id && member.is_active ? setTarget : null}
+            {list.member_of.length === 0 ? (
+              <p className="text-sm text-ink-secondary">
+                You have not joined anyone else’s workspace yet.
+              </p>
+            ) : null}
+            {list.member_of.map((row) => (
+              <WorkspaceCard
+                key={row.id}
+                title={row.name}
+                subtitle={`${row.member_count} member${row.member_count === 1 ? "" : "s"}`}
+                onOpen={() => navigate(`/settings/members/${row.id}`)}
               />
             ))}
           </div>

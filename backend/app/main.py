@@ -7,7 +7,8 @@ from slowapi.middleware import SlowAPIMiddleware
 from starlette.middleware.cors import CORSMiddleware
 
 from app.api import (
-    auth, calibration, escalations, flakes, github_oauth, health, members, repos, runs, usage,
+    auth, calibration, escalations, flakes, github_oauth, health, members, notifications,
+    repos, runs, usage, workspaces,
 )
 from app.api import settings as settings_api
 from app.config import Settings, get_settings
@@ -77,6 +78,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(health.router)
     app.include_router(auth.router, prefix="/api")
     app.include_router(members.router, prefix="/api")
+    app.include_router(workspaces.router, prefix="/api")
+    app.include_router(notifications.router, prefix="/api")
     app.include_router(repos.router, prefix="/api")
     app.include_router(runs.router, prefix="/api")
     app.include_router(flakes.router, prefix="/api")
