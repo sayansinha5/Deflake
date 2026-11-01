@@ -23,11 +23,18 @@ class RegisterIn(StrictModel):
     full_name: str = Field(min_length=1, max_length=120)
     email: Email
     password: str = Field(min_length=1, max_length=256)
+    invite_token: str | None = Field(default=None, min_length=8, max_length=64)
 
 
 class PasswordChangeIn(StrictModel):
     current_password: str = Field(min_length=1, max_length=256)
     new_password: str = Field(min_length=1, max_length=256)
+
+
+class WorkspaceSummaryOut(BaseModel):
+    id: str
+    name: str
+    role: Literal["owner", "member"]
 
 
 class MeOut(BaseModel):
@@ -37,6 +44,8 @@ class MeOut(BaseModel):
     role: Literal["owner", "member"]
     is_admin: bool
     expires_at: datetime
+    needs_onboarding: bool = False
+    workspace: WorkspaceSummaryOut | None = None
 
 
 class MemberOut(BaseModel):

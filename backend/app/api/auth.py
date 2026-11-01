@@ -10,11 +10,13 @@ from app.api.deps import CurrentSession, current_session, get_db, get_settings_d
 from app.config import Settings
 from app.db.models import RevokedSession, User, utcnow
 from app.errors import ApiError
-from app.schemas.auth import MeOut, PasswordChangeIn, RegisterIn, SignInIn
+from app.schemas.auth import MeOut, PasswordChangeIn, RegisterIn, SignInIn, WorkspaceSummaryOut
 from app.security import audit
 from app.security.auth import COOKIE_NAME, COOKIE_PATH, cookie_kwargs, decode_token, issue_token
 from app.security.passwords import hash_password, password_problem, verify_password
 from app.security.ratelimit import REGISTER_LIMIT, limiter, signin_failures
+from app.services import workspaces as workspace_service
+from app.services.allowlist import ensure_demo_repos_for_user
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -40,10 +42,25 @@ def _too_many(minutes: int) -> ApiError:
     )
 
 
-def _me(user: User, expires_at: datetime) -> MeOut:
+async def _me(db: AsyncSession, user: User, expires_at: datetime) -> MeOut:
+    membership = await workspace_service.membership_for_user(db, user.id)
+    needs = membership is None
+    workspace = None
+    if membership is not None:
+        workspace = WorkspaceSummaryOut(
+            id=membership.workspace.id,
+            name=membership.workspace.name,
+            role=membership.role,  # type: ignore[arg-type]
+        )
     return MeOut(
-        id=user.id, full_name=user.full_name, email=user.email, role=user.role,
-        is_admin=user.role == "owner", expires_at=expires_at,
+        id=user.id,
+        full_name=user.full_name,
+        email=user.email,
+        role=user.role,  # type: ignore[arg-type]
+        is_admin=user.role == "owner",
+        expires_at=expires_at,
+        needs_onboarding=needs,
+        workspace=workspace,
     )
 
 
@@ -135,8 +152,11 @@ async def sign_out(
 
 
 @router.get("/me", response_model=MeOut)
-async def me(session: CurrentSession = Depends(current_session)) -> MeOut:
-    return _me(session.user, session.claims.expires_at)
+async def me(
+    session: CurrentSession = Depends(current_session),
+    db: AsyncSession = Depends(get_db),
+) -> MeOut:
+    return await _me(db, session.user, session.claims.expires_at)
 
 
 @router.post("/register", status_code=201, response_model=MeOut)
@@ -155,6 +175,27 @@ async def register(
     if problem := password_problem(body.password, settings.password_min_length):
         raise ApiError(400, "weak_password", problem, {"fields": ["password"]})
 
+    invite = None
+    if body.invite_token:
+        invite = await workspace_service.get_pending_invite_by_token(db, body.invite_token)
+        if invite is None:
+            raise ApiError(400, "invite_invalid", "This invitation is invalid or already used.")
+        if invite.email.lower() != body.email.lower():
+            raise ApiError(
+                400,
+                "invite_email_mismatch",
+                "Use the email address this invitation was sent to.",
+            )
+        expected = workspace_service.invite_full_name(
+            invite.first_name, invite.last_name, invite.email,
+        )
+        if body.full_name.strip() != expected:
+            raise ApiError(
+                400,
+                "invite_name_mismatch",
+                "Name must match the invitation.",
+            )
+
     email = body.email.lower()
     if await db.scalar(select(User.id).where(User.email == email)):
         audit.record(db, settings, "register", "failed", None, ip)
@@ -171,10 +212,15 @@ async def register(
     except IntegrityError:
         await db.rollback()
         raise ApiError(400, "registration_failed", REGISTER_FAILED) from None
+
+    if invite is not None:
+        await workspace_service.accept_invite(db, invite, user)
+
+    await ensure_demo_repos_for_user(db, settings, user.id)
     audit.record(db, settings, "register", "success", user.id, ip)
     await db.commit()
     expires_at = _start_session(response, settings, user)
-    return _me(user, expires_at)
+    return await _me(db, user, expires_at)
 
 
 @router.post("/password", status_code=204)

@@ -4,9 +4,9 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "../components/ui/Button";
 import { Dialog } from "../components/ui/Dialog";
 import { useAuth } from "../hooks/useAuth";
-import { safeNext } from "../lib/api";
+import { api, safeNext } from "../lib/api";
 import { AuthCard } from "./AuthCard";
-import { inputClass, PasswordInput } from "./authFields";
+import { EmailInput, PasswordInput } from "./authFields";
 
 const DEMOS = [
   { label: "Owner", email: "owner@deflake.local", password: "Owner2026" },
@@ -33,8 +33,20 @@ export function SignIn() {
     setBusy(true);
     setError("");
     try {
-      await signIn(email, password);
-      navigate(safeNext(params.get("next")), { replace: true });
+      const user = await signIn(email, password);
+      const inviteToken = params.get("invite");
+      if (inviteToken && user && !user.needs_onboarding) {
+        try {
+          await api.post("/invites/accept", { token: inviteToken });
+        } catch {
+          /* Invite may already be used or email mismatch; continue to app. */
+        }
+      }
+      if (user?.needs_onboarding) {
+        navigate("/onboarding", { replace: true });
+      } else {
+        navigate(safeNext(params.get("next")), { replace: true });
+      }
     } catch (err) {
       setError(err.message || "Email or password is incorrect.");
     } finally {
@@ -54,11 +66,14 @@ export function SignIn() {
         </p>
       ) : null}
       <form className="flex flex-col gap-4" onSubmit={onSubmit}>
+        {error ? (
+          <p className="text-center text-sm text-danger" role="alert">
+            {error}
+          </p>
+        ) : null}
         <label className="flex flex-col gap-1.5 text-sm text-ink-secondary">
           Email
-          <input
-            className={inputClass}
-            type="email"
+          <EmailInput
             name="email"
             autoComplete="username"
             placeholder="Email address"
@@ -83,11 +98,6 @@ export function SignIn() {
             Forgot password?
           </button>
         </div>
-        {error ? (
-          <p className="text-sm text-danger" role="alert">
-            {error}
-          </p>
-        ) : null}
         <Button type="submit" busy={busy} className="w-full">
           {busy ? "Signing in…" : "Sign in"}
         </Button>

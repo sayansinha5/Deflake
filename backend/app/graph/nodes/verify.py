@@ -2,12 +2,13 @@
 import structlog
 from sqlalchemy import select
 
-from app.db.models import Flake, Patch, Run, Verification, utcnow
+from app.db.models import Flake, Patch, Repo, Run, Verification, utcnow
 from app.errors import ApiError
 from app.graph.context import current_context
 from app.graph.gates import gate
 from app.graph.nodes.common import note_error
 from app.graph.state import FlakeState
+from app.services.allowlist import runner_repo_key
 from app.services.bisection import failure_count
 from app.services.detect import FAIL_OUTCOMES
 from app.services.events import append_event
@@ -81,7 +82,8 @@ async def verify(state: FlakeState) -> dict:
         diff = proposed.diff
         patch_id = proposed.id
         victim = flake.test_id
-        repo_id = run.repo_id
+        repo = await session.get(Repo, run.repo_id)
+        repo_id = runner_repo_key(repo) if repo is not None else run.repo_id
         timeout_s = ctx.settings.per_test_run_timeout_s
         known = set(await session.scalars(
             select(Flake.test_id).where(Flake.run_id == run_id)

@@ -47,9 +47,9 @@ function Segmented({ legend, name, value, options, onChange }) {
 }
 
 function sourceLabel(row) {
-  if (row.source === "github_private") return "GitHub · Private";
-  if (row.source === "github_public") return "GitHub";
-  return "Demo";
+  if (row.source === "demo") return "Demo";
+  const base = row.source === "github_private" ? "GitHub · Private" : "GitHub";
+  return row.is_personal === false ? `${base} · Workspace` : `${base} · Personal`;
 }
 
 function sourceTone(row) {
@@ -222,6 +222,7 @@ export function Repositories() {
   const [importTouched, setImportTouched] = useState(false);
   const [importBusy, setImportBusy] = useState(false);
   const [importError, setImportError] = useState(null);
+  const [keepPersonal, setKeepPersonal] = useState(true);
 
   const [ghSearch, setGhSearch] = useState("");
   const [ghPythonOnly, setGhPythonOnly] = useState(true);
@@ -304,6 +305,7 @@ export function Repositories() {
     setImportUrl("");
     setImportTouched(false);
     setImportError(null);
+    setKeepPersonal(true);
     setGhSearch("");
     setGhPythonOnly(true);
     setGhPage(1);
@@ -351,7 +353,10 @@ export function Repositories() {
     if (!urlCheck.ok) return;
     setImportBusy(true);
     try {
-      const response = await api.post("/repos/import", { url: importUrl.trim() });
+      const response = await api.post("/repos/import", {
+        url: importUrl.trim(),
+        personal: keepPersonal,
+      });
       const row = response.data;
       setAddOpen(false);
       await load();
@@ -375,6 +380,7 @@ export function Repositories() {
       const response = await api.post("/repos/import/github", {
         owner: item.owner,
         name: item.name,
+        personal: keepPersonal,
       });
       const row = response.data;
       setAddOpen(false);
@@ -625,6 +631,32 @@ export function Repositories() {
           </>
         )}
       >
+        <div className="mb-4 rounded-md border border-border bg-white px-4 py-3">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-medium text-ink">Keep it personal</p>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={keepPersonal}
+              aria-label="Keep it personal"
+              onClick={() => setKeepPersonal((value) => !value)}
+              className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
+                keepPersonal ? "bg-mint" : "bg-border-strong"
+              }`}
+            >
+              <span
+                className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
+                  keepPersonal ? "left-5" : "left-0.5"
+                }`}
+              />
+            </button>
+          </div>
+          <p className="mt-2 text-xs leading-5 text-ink-secondary">
+            {keepPersonal
+              ? "Only you can see this repository and its scans. Turn this off to share it with everyone in your workspace."
+              : "Shared with your workspace. Teammates can see this repository and run scans on it."}
+          </p>
+        </div>
         <Tabs
           value={addTab}
           onValueChange={setAddTab}

@@ -30,7 +30,7 @@ from app.integrations.github.url import GitHubUrlError, parse_github_repo_url, v
 from app.integrations.github.user_repos import fetch_repo_with_token
 from app.preparer_client import PreparerClient
 from app.services import github_accounts
-from app.services.repo_ids import imported_repo_id
+from app.services.repo_ids import imported_repo_id_for_user
 from app.services.repos_access import (
     PRIVATE_SOURCE,
     PUBLIC_SOURCE,
@@ -38,6 +38,7 @@ from app.services.repos_access import (
     get_visible_repo,
 )
 from app.services.run_manager import active_run_for
+from app.services.workspaces import membership_for_user
 
 log = structlog.get_logger()
 
@@ -68,21 +69,30 @@ async def _imported_count(db: AsyncSession, user_id: str) -> int:
 async def find_duplicate(
     db: AsyncSession, owner: str, name: str, user_id: str,
 ) -> Repo | None:
-    """Match an existing import of the same GitHub owner/name visible to this user."""
-    rows = list(
-        await db.scalars(
-            select(Repo).where(
-                Repo.source.in_((PUBLIC_SOURCE, PRIVATE_SOURCE)),
-                func.lower(Repo.owner) == owner.lower(),
-                func.lower(Repo.name) == name.lower(),
-            )
-        )
+    """Match an existing import of the same GitHub owner/name by this user only."""
+    return await db.scalar(
+        select(Repo).where(
+            Repo.created_by == user_id,
+            Repo.source.in_((PUBLIC_SOURCE, PRIVATE_SOURCE)),
+            func.lower(Repo.owner) == owner.lower(),
+            func.lower(Repo.name) == name.lower(),
+        ).limit(1)
     )
-    for repo in rows:
-        if repo.source == PRIVATE_SOURCE and repo.created_by != user_id:
-            continue
-        return repo
-    return None
+
+
+async def _visibility_fields(
+    db: AsyncSession, user_id: str, *, personal: bool,
+) -> tuple[bool, str | None]:
+    if personal:
+        return True, None
+    membership = await membership_for_user(db, user_id)
+    if membership is None:
+        raise ApiError(
+            400,
+            "no_workspace",
+            "Create a workspace before importing a shared repository.",
+        )
+    return False, membership.workspace.id
 
 
 def repo_to_path(repo_id: str) -> str:
@@ -94,6 +104,8 @@ async def import_public_url(
     settings: Settings,
     user_id: str,
     url: str,
+    *,
+    personal: bool = True,
 ) -> tuple[Repo, bool]:
     """
     Start a public import. Returns (repo, already_imported).
@@ -121,19 +133,13 @@ async def import_public_url(
     if meta.is_private:
         raise ApiError(404, "repo_not_public", NOT_PUBLIC)
 
-    repo_id = imported_repo_id(meta.owner, meta.name)
-    # Extremely unlikely collision with a different full name; refuse rather than overwrite.
+    is_personal, workspace_id = await _visibility_fields(db, user_id, personal=personal)
+    repo_id = imported_repo_id_for_user(meta.owner, meta.name, user_id)
     clash = await db.get(Repo, repo_id)
     if clash is not None:
-        if (
-            clash.owner
-            and clash.owner.lower() == meta.owner.lower()
-            and clash.name.lower() == meta.name.lower()
-        ):
+        if clash.created_by == user_id:
             return clash, True
-        repo_id = imported_repo_id(f"{meta.owner}-{meta.name}", meta.name)
-        if await db.get(Repo, repo_id) is not None:
-            raise ApiError(409, "conflict", "Could not allocate an id for this repository.")
+        raise ApiError(409, "conflict", "Could not allocate an id for this repository.")
 
     repo = Repo(
         id=repo_id,
@@ -150,6 +156,8 @@ async def import_public_url(
         test_count=0,
         editable_paths=[],
         created_by=user_id,
+        is_personal=is_personal,
+        workspace_id=workspace_id,
         updated_at=utcnow(),
     )
     db.add(repo)
@@ -185,6 +193,8 @@ async def import_from_github(
     user_id: str,
     owner: str,
     name: str,
+    *,
+    personal: bool = True,
 ) -> tuple[Repo, bool, str | None]:
     """
     Import a repo visible to the connected GitHub account.
@@ -219,26 +229,13 @@ async def import_from_github(
             await github_accounts.mark_disconnected_on_unauthorized(db, user_id)
         raise
 
-    repo_id = imported_repo_id(meta.owner, meta.name)
+    is_personal, workspace_id = await _visibility_fields(db, user_id, personal=personal)
+    repo_id = imported_repo_id_for_user(meta.owner, meta.name, user_id)
     clash = await db.get(Repo, repo_id)
     if clash is not None:
-        if (
-            clash.owner
-            and clash.owner.lower() == meta.owner.lower()
-            and clash.name.lower() == meta.name.lower()
-        ):
-            # Private clash owned by someone else is invisible via find_duplicate;
-            # refuse colliding public id.
-            if clash.source == PRIVATE_SOURCE and clash.created_by != user_id:
-                repo_id = imported_repo_id(f"{meta.owner}-u{user_id[:8]}", meta.name)
-                if await db.get(Repo, repo_id) is not None:
-                    raise ApiError(409, "conflict", "Could not allocate an id for this repository.")
-            else:
-                return clash, True, None
-        else:
-            repo_id = imported_repo_id(f"{meta.owner}-{meta.name}", meta.name)
-            if await db.get(Repo, repo_id) is not None:
-                raise ApiError(409, "conflict", "Could not allocate an id for this repository.")
+        if clash.created_by == user_id:
+            return clash, True, None
+        raise ApiError(409, "conflict", "Could not allocate an id for this repository.")
 
     source = PRIVATE_SOURCE if meta.is_private else PUBLIC_SOURCE
     prepare_token = token if meta.is_private else None
@@ -258,6 +255,8 @@ async def import_from_github(
         test_count=0,
         editable_paths=[],
         created_by=user_id,
+        is_personal=is_personal,
+        workspace_id=workspace_id,
         updated_at=utcnow(),
     )
     db.add(repo)

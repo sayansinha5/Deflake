@@ -8,9 +8,9 @@ const tones = {
   accent: "bg-ice text-accent-ink",
 };
 
-export function Badge({ tone = "neutral", children }) {
+export function Badge({ tone = "neutral", className, children }) {
   return (
-    <span className={clsx("inline-flex items-center rounded-md px-2 py-0.5 text-meta font-medium", tones[tone])}>
+    <span className={clsx("inline-flex items-center rounded-md px-2 py-0.5 text-meta font-medium", tones[tone], className)}>
       {children}
     </span>
   );

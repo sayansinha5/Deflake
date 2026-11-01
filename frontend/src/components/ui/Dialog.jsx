@@ -28,7 +28,7 @@ export function Dialog({ open, onOpenChange, title, description, children, foote
         )}
       >
         <h2 id={titleId} className="text-section text-base font-semibold text-ink">{title}</h2>
-        {description ? <p className="mt-1 text-body text-ink-secondary">{description}</p> : null}
+        {description ? <p className="my-4 text-body text-ink-secondary">{description}</p> : null}
         <div className="mt-4">{children}</div>
         {footer ? <div className="mt-6 flex justify-end gap-2">{footer}</div> : null}
       </div>

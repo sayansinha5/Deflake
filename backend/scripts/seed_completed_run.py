@@ -1,7 +1,7 @@
 """Loads the checked-in flaky-shop scan when the database has no finished run.
 
 Safe to run on every start. An existing completed or clean run is left unchanged.
-This does not start a scan.
+This does not start a scan. The fixture is attached to the Owner's personal demo.
 """
 import asyncio
 import json
@@ -24,12 +24,18 @@ from app.db.models import (  # noqa: E402
     LlmCall,
     Patch,
     Reference,
+    Repo,
     Run,
     RunEvent,
     User,
     Verification,
 )
-from app.services.allowlist import seed_repos  # noqa: E402
+from app.services.allowlist import (  # noqa: E402
+    allowlist_file,
+    ensure_demo_repos_for_user,
+    seed_repos,
+)
+from app.services.repo_ids import demo_repo_id_for_user  # noqa: E402
 
 FIXTURE = Path(__file__).resolve().parents[1] / "seed" / "completed_run.json"
 FINISHED = ("completed", "clean")
@@ -46,13 +52,6 @@ ORDER = (
     ("llm_calls", LlmCall),
     ("events", RunEvent),
 )
-
-
-def _allowlist(settings) -> Path:
-    path = Path(settings.allowlist_path)
-    if not path.is_absolute():
-        path = Path(__file__).resolve().parents[2] / "demo-repos" / "allowlist.yaml"
-    return path
 
 
 def _coerce(column, value):
@@ -95,19 +94,27 @@ async def seed_completed_run() -> str:
             existing = await db.scalar(select(Run.id).where(Run.status.in_(FINISHED)))
             if existing is not None:
                 return f"Completed run {existing} already present."
-            path = _allowlist(settings)
+            path = allowlist_file(settings)
             if path.is_file():
                 await seed_repos(db, path)
             owner = await db.scalar(select(User).where(User.role == "owner"))
-            overrides = {"created_by": owner.id} if owner is not None else {}
+            if owner is None:
+                return "No owner account; skipped completed-run fixture."
+            await ensure_demo_repos_for_user(db, settings, owner.id)
+            demo_id = demo_repo_id_for_user("flaky-shop", owner.id)
+            if await db.get(Repo, demo_id) is None:
+                return "Owner has no personal demo repo; skipped fixture."
+            overrides = {"created_by": owner.id, "repo_id": demo_id}
             for key, model in ORDER:
                 rows = payload.get(key) or []
                 if key == "run":
                     rows = [rows]
-                db.add_all(_objects(model, rows, overrides if key == "run" else {}))
+                db.add_all(
+                    _objects(model, rows, overrides if key == "run" else {})
+                )
                 await db.flush()
             await db.commit()
-        return f"Loaded completed run {payload['run']['id']}."
+        return f"Loaded completed run {payload['run']['id']} onto {demo_id}."
     finally:
         await engine.dispose()
 

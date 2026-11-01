@@ -23,6 +23,8 @@ class RepoOut(BaseModel):
     owner: str | None = None
     html_url: str | None = None
     is_private: bool = False
+    is_personal: bool = True
+    workspace_id: str | None = None
     commit_sha: str | None = None
     prepare_status: str = "ready"
     prepare_error: str | None = None
@@ -35,11 +37,13 @@ class RepoOut(BaseModel):
 
 class ImportRepoIn(StrictModel):
     url: str = Field(min_length=15, max_length=300)
+    personal: bool = True
 
 
 class ImportGithubRepoIn(StrictModel):
     owner: str = Field(min_length=1, max_length=39)
     name: str = Field(min_length=1, max_length=100)
+    personal: bool = True
 
 
 class ImportRepoOut(RepoOut):
