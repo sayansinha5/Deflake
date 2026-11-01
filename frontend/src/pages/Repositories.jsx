@@ -436,7 +436,7 @@ export function Repositories() {
       <PageHeader title="Repositories" />
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <p className="text-body text-ink-secondary">
-          Demo repositories stay available. Import a public GitHub project to scan it live.
+          Import a repository to scan it live. Demo repositories stay available.
         </p>
         {importEnabled ? (
           <Button onClick={openAdd}>Add repository</Button>
