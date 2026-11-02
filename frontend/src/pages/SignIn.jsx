@@ -10,7 +10,7 @@ import { EmailInput, PasswordInput } from "./authFields";
 
 const DEMOS = [
   { label: "Owner", email: "owner@deflake.local", password: "Owner2026" },
-  { label: "Judge", email: "judge@deflake.local", password: "Judge2026" },
+  { label: "Member", email: "member@deflake.local", password: "Member2026" },
 ];
 
 export function SignIn() {

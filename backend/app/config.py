@@ -11,7 +11,7 @@ DEV_DEFAULTS: dict[str, str] = {
     "DB_PASSWORD": "deflake_app_dev_pw",
     "DB_MIGRATION_PASSWORD": "deflake_migrator_dev_pw",
     "OWNER_PASSWORD": "Owner2026",
-    "DEMO_ACCOUNT_PASSWORD": "Judge2026",
+    "DEMO_ACCOUNT_PASSWORD": "Member2026",
 }
 
 MIN_PRODUCTION_SECRET_LENGTH = 32

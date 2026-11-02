@@ -197,7 +197,7 @@ sh scripts/seed.sh
 
 | Email | Password |
 | --- | --- |
-| `judge@deflake.local` | `Judge2026` |
+| `member@deflake.local` | `Member2026` |
 | `owner@deflake.local` | `Owner2026` |
 
 ---

@@ -68,6 +68,6 @@ def test_key_assignment():
 
 
 def test_nested_structures():
-    data = redact_obj({"log": "user judge@deflake.local used sk-abcdefghijklmnopqrstuvwxyz"})
-    assert "judge@" not in data["log"]
+    data = redact_obj({"log": "user member@deflake.local used sk-abcdefghijklmnopqrstuvwxyz"})
+    assert "member@" not in data["log"]
     assert "sk-" not in data["log"]
