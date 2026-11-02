@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import { ChevronRight, Menu as MenuIcon } from "lucide-react";
 import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate, useOutletContext, useParams, useSearchParams } from "react-router-dom";
 
@@ -258,22 +258,29 @@ export function SettingsIntegration() {
         </div>
       </div>
 
-      <ul className="flex flex-col gap-2">
+      <div className="my-4 border-t border-dashed border-gray-300" />
+
+      <div className="flex flex-col gap-2">
         {view.integrations.map((item) => (
-          <li key={item.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-surface px-4 py-3 shadow-card">
-            <div>
-              <p className="text-sm text-ink">{item.label}</p>
-              {item.detail && item.id !== "tendem" ? <p className="text-xs text-ink-secondary">{item.detail}</p> : null}
+          <Fragment key={item.id}>
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-surface px-4 py-3 shadow-card">
+              <div>
+                <p className="text-sm text-ink">{item.label}</p>
+                {item.detail && item.id !== "tendem" ? <p className="text-xs text-ink-secondary">{item.detail}</p> : null}
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge tone={item.status === "configured" ? "success" : item.status === "missing" ? "danger" : "neutral"}>
+                  {STATUS[item.status] || item.status}
+                </Badge>
+                <Button variant="secondary" busy={busy === item.id} onClick={() => test(item.id)}>Test</Button>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <Badge tone={item.status === "configured" ? "success" : item.status === "missing" ? "danger" : "neutral"}>
-                {STATUS[item.status] || item.status}
-              </Badge>
-              <Button variant="secondary" busy={busy === item.id} onClick={() => test(item.id)}>Test</Button>
-            </div>
-          </li>
+            {item.id === "toloka" ? (
+              <div className="my-4 border-t border-dashed border-gray-300" />
+            ) : null}
+          </Fragment>
         ))}
-      </ul>
+      </div>
 
       <Dialog
         open={connectOpen}
