@@ -248,9 +248,6 @@ export function SettingsIntegration() {
             )}
           </div>
           <div className="flex items-center gap-2">
-            <Badge tone={github.connected ? "success" : "neutral"}>
-              {github.connected ? "Connected" : "Not connected"}
-            </Badge>
             {github.oauth_enabled && !github.connected ? (
               <Button onClick={() => setConnectOpen(true)}>Connect GitHub</Button>
             ) : null}
@@ -402,7 +399,7 @@ export function SettingsDefaults() {
   }
 
   return (
-    <div className="w-full max-w-3xl">
+    <div className="w-full max-w-2xl">
       <h3 className="text-lg font-medium tracking-wide text-ink">General</h3>
       <div className="mt-4">
         <DefaultsRow label="Detect reruns">

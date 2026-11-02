@@ -45,8 +45,6 @@ export function AccountMenu() {
 
   if (!user) return null;
 
-  const role = user.role === "owner" ? "Owner" : "Member";
-
   return (
     <div className="relative" ref={menuRef}>
       <button
@@ -68,18 +66,19 @@ export function AccountMenu() {
           <div className="px-2 py-2">
             <p className="font-medium text-ink">{user.full_name}</p>
             <p className="text-sm text-ink-secondary">{user.email}</p>
-            <div className="mt-2">
-              <Badge tone={user.role === "owner" ? "accent" : "neutral"}>{role}</Badge>
-            </div>
           </div>
-          <Link
-            to="/settings/account"
+          <button
+            type="button"
             role="menuitem"
-            className="block rounded-md px-2 py-2 text-sm text-ink hover:bg-ice"
-            onClick={() => setOpen(false)}
+            className="block w-full rounded-md px-2 py-2 text-left text-sm font-medium text-ink no-underline hover:bg-ice"
+            onClick={() => {
+              setOpen(false);
+              navigate("/settings/account");
+            }}
           >
             Account settings
-          </Link>
+          </button>
+          <div className="my-1 border-t border-border" />
           <button
             type="button"
             role="menuitem"
