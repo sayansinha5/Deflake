@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import { ChevronRight, Menu as MenuIcon } from "lucide-react";
 import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate, useOutletContext, useParams, useSearchParams } from "react-router-dom";
 
@@ -16,7 +16,7 @@ import { useAuth } from "../hooks/useAuth";
 import { api, normalizeError } from "../lib/api";
 import { apiBaseUrl } from "../lib/config";
 import { formatMoney } from "../lib/format";
-import { EmailInput, inputClass } from "./authFields";
+import { CopyButton, EmailInput, inputClass, PasswordInput } from "./authFields";
 
 const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 const emptyInviteDraft = () => ({ first_name: "", last_name: "", email: "" });
@@ -46,9 +46,6 @@ export function Settings() {
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(null);
   const [membersTrail, setMembersTrail] = useState(null);
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [saving, setSaving] = useState(false);
   const owner = user?.role === "owner";
   const onMembers = location.pathname === "/settings/members"
     || location.pathname.startsWith("/settings/members/");
@@ -84,22 +81,6 @@ export function Settings() {
       push({ tone: "error", message: normalized.message });
     } finally {
       setBusy(null);
-    }
-  }
-
-  async function changePassword(event) {
-    event.preventDefault();
-    setSaving(true);
-    try {
-      await api.post("/auth/password", { current_password: currentPassword, new_password: newPassword });
-      setCurrentPassword("");
-      setNewPassword("");
-      push({ message: "Password updated. Other sessions were signed out." });
-    } catch (err) {
-      const normalized = err.normalized || normalizeError(err);
-      push({ tone: "error", message: normalized.message });
-    } finally {
-      setSaving(false);
     }
   }
 
@@ -177,12 +158,6 @@ export function Settings() {
               busy,
               test,
               setMembersTrail,
-              currentPassword,
-              setCurrentPassword,
-              newPassword,
-              setNewPassword,
-              saving,
-              changePassword,
             }}
             />
           ) : null}
@@ -273,9 +248,6 @@ export function SettingsIntegration() {
             )}
           </div>
           <div className="flex items-center gap-2">
-            <Badge tone={github.connected ? "success" : "neutral"}>
-              {github.connected ? "Connected" : "Not connected"}
-            </Badge>
             {github.oauth_enabled && !github.connected ? (
               <Button onClick={() => setConnectOpen(true)}>Connect GitHub</Button>
             ) : null}
@@ -286,22 +258,29 @@ export function SettingsIntegration() {
         </div>
       </div>
 
-      <ul className="flex flex-col gap-2">
+      <div className="my-4 border-t border-dashed border-gray-300" />
+
+      <div className="flex flex-col gap-2">
         {view.integrations.map((item) => (
-          <li key={item.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-surface px-4 py-3 shadow-card">
-            <div>
-              <p className="text-sm text-ink">{item.label}</p>
-              {item.detail && item.id !== "tendem" ? <p className="text-xs text-ink-secondary">{item.detail}</p> : null}
+          <Fragment key={item.id}>
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-surface px-4 py-3 shadow-card">
+              <div>
+                <p className="text-sm text-ink">{item.label}</p>
+                {item.detail && item.id !== "tendem" ? <p className="text-xs text-ink-secondary">{item.detail}</p> : null}
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge tone={item.status === "configured" ? "success" : item.status === "missing" ? "danger" : "neutral"}>
+                  {STATUS[item.status] || item.status}
+                </Badge>
+                <Button variant="secondary" busy={busy === item.id} onClick={() => test(item.id)}>Test</Button>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <Badge tone={item.status === "configured" ? "success" : item.status === "missing" ? "danger" : "neutral"}>
-                {STATUS[item.status] || item.status}
-              </Badge>
-              <Button variant="secondary" busy={busy === item.id} onClick={() => test(item.id)}>Test</Button>
-            </div>
-          </li>
+            {item.id === "toloka" ? (
+              <div className="my-4 border-t border-dashed border-gray-300" />
+            ) : null}
+          </Fragment>
         ))}
-      </ul>
+      </div>
 
       <Dialog
         open={connectOpen}
@@ -427,7 +406,7 @@ export function SettingsDefaults() {
   }
 
   return (
-    <div className="w-full max-w-3xl">
+    <div className="w-full max-w-2xl">
       <h3 className="text-lg font-medium tracking-wide text-ink">General</h3>
       <div className="mt-4">
         <DefaultsRow label="Detect reruns">
@@ -472,29 +451,214 @@ export function SettingsDefaults() {
   );
 }
 
+function splitFullName(fullName) {
+  const parts = String(fullName || "").trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return { first: "", last: "" };
+  if (parts.length === 1) return { first: parts[0], last: "" };
+  return { first: parts[0], last: parts.slice(1).join(" ") };
+}
+
+function AccountRow({ label, htmlFor, children }) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 py-4">
+      <label htmlFor={htmlFor} className="w-28 shrink-0 text-sm text-ink-secondary">
+        {label}
+      </label>
+      <div className="flex shrink-0 items-center justify-end gap-2">
+        {children}
+      </div>
+    </div>
+  );
+}
+
 export function SettingsAccount() {
-  const {
-    user,
-    owner,
-    currentPassword,
-    setCurrentPassword,
-    newPassword,
-    setNewPassword,
-    saving,
-    changePassword,
-  } = useOutletContext();
+  const { user } = useOutletContext();
+  const { refresh } = useAuth();
+  const { push } = useToast();
+  const initial = splitFullName(user?.full_name);
+  const [firstName, setFirstName] = useState(initial.first);
+  const [lastName, setLastName] = useState(initial.last);
+  const [savingName, setSavingName] = useState(false);
+  const [passwordOpen, setPasswordOpen] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+  const [savingPassword, setSavingPassword] = useState(false);
+  const [revealPasswords, setRevealPasswords] = useState(false);
+
+  useEffect(() => {
+    const next = splitFullName(user?.full_name);
+    setFirstName(next.first);
+    setLastName(next.last);
+  }, [user?.full_name]);
+
+  const saved = splitFullName(user?.full_name);
+  const nameDirty = (
+    firstName.trim() !== saved.first
+    || lastName.trim() !== saved.last
+  ) && firstName.trim().length > 0;
+
+  async function saveName() {
+    if (!nameDirty) return;
+    setSavingName(true);
+    try {
+      await api.patch("/auth/me", {
+        first_name: firstName.trim(),
+        last_name: lastName.trim(),
+      });
+      await refresh();
+      push({ message: "Name updated." });
+    } catch (err) {
+      const normalized = err.normalized || normalizeError(err);
+      push({ tone: "error", message: normalized.message });
+    } finally {
+      setSavingName(false);
+    }
+  }
+
+  async function updatePassword(event) {
+    event.preventDefault();
+    setSavingPassword(true);
+    setPasswordError("");
+    try {
+      await api.post("/auth/password", {
+        current_password: currentPassword,
+        new_password: newPassword,
+      });
+      setCurrentPassword("");
+      setNewPassword("");
+      setRevealPasswords(false);
+      setPasswordOpen(false);
+      push({ message: "Password updated. Other sessions were signed out." });
+    } catch (err) {
+      const normalized = err.normalized || normalizeError(err);
+      setPasswordError(normalized.message);
+    } finally {
+      setSavingPassword(false);
+    }
+  }
+
   return (
     <div className="w-full max-w-2xl">
-      <p className="text-sm text-ink">{user?.full_name}</p>
-      <p className="text-xs text-ink-secondary">{user?.email}</p>
-      <div className="mt-2"><Badge tone={owner ? "accent" : "neutral"}>{owner ? "Owner" : "Member"}</Badge></div>
-      <form className="mt-6 max-w-md" onSubmit={changePassword}>
-        <label className="block text-xs text-ink-secondary" htmlFor="current-password">Current password</label>
-        <input id="current-password" type="password" autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} className="mt-1 h-10 w-full rounded-md border border-border-strong bg-sunken px-3 text-sm text-ink" />
-        <label className="mt-3 block text-xs text-ink-secondary" htmlFor="new-password">New password</label>
-        <input id="new-password" type="password" autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} className="mt-1 h-10 w-full rounded-md border border-border-strong bg-sunken px-3 text-sm text-ink" />
-        <div className="mt-4"><Button type="submit" busy={saving}>Update password</Button></div>
-      </form>
+      <AccountRow label="First name" htmlFor="account-first-name">
+        <input
+          id="account-first-name"
+          className={`${inputClass} w-48`}
+          value={firstName}
+          onChange={(event) => setFirstName(event.target.value)}
+          autoComplete="given-name"
+        />
+      </AccountRow>
+
+      <AccountRow label="Last name" htmlFor="account-last-name">
+        <input
+          id="account-last-name"
+          className={`${inputClass} w-48`}
+          value={lastName}
+          onChange={(event) => setLastName(event.target.value)}
+          autoComplete="family-name"
+        />
+      </AccountRow>
+      <div className="flex justify-end pb-4">
+        <Button
+          type="button"
+          variant="secondary"
+          busy={savingName}
+          disabled={!nameDirty}
+          onClick={saveName}
+        >
+          Update
+        </Button>
+      </div>
+      <div className="my-4 border-t border-dashed border-gray-300" />
+
+      <AccountRow label="Email">
+        <div className="flex min-w-0 items-center space-x-2">
+          <span className="truncate text-sm text-ink">{user?.email}</span>
+          <CopyButton value={user?.email || ""} label="Copy email" />
+        </div>
+      </AccountRow>
+      <div className="my-4 border-t border-dashed border-gray-300" />
+
+      <AccountRow label="Password">
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={() => {
+            setPasswordError("");
+            setCurrentPassword("");
+            setNewPassword("");
+            setRevealPasswords(false);
+            setPasswordOpen(true);
+          }}
+        >
+          Change Password
+        </Button>
+      </AccountRow>
+      <div className="my-4 border-t border-dashed border-gray-300" />
+
+      <Dialog
+        open={passwordOpen}
+        onOpenChange={(next) => {
+          if (savingPassword) return;
+          setPasswordOpen(next);
+          if (!next) {
+            setCurrentPassword("");
+            setNewPassword("");
+            setPasswordError("");
+            setRevealPasswords(false);
+          }
+        }}
+        title="Change password"
+        footer={(
+          <>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={savingPassword}
+              onClick={() => setPasswordOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              busy={savingPassword}
+              disabled={!currentPassword || !newPassword}
+              onClick={updatePassword}
+            >
+              Update password
+            </Button>
+          </>
+        )}
+      >
+        <form className="mt-6 flex flex-col gap-4" onSubmit={updatePassword}>
+          {passwordError ? (
+            <p className="text-center text-sm text-danger" role="alert">{passwordError}</p>
+          ) : null}
+          <label className="flex flex-col gap-1.5 text-sm text-ink-secondary">
+            Current password
+            <PasswordInput
+              autoComplete="current-password"
+              value={currentPassword}
+              onChange={(event) => setCurrentPassword(event.target.value)}
+              reveal={revealPasswords}
+              onRevealChange={setRevealPasswords}
+              required
+            />
+          </label>
+          <label className="flex flex-col gap-1.5 text-sm text-ink-secondary">
+            New password
+            <PasswordInput
+              autoComplete="new-password"
+              value={newPassword}
+              onChange={(event) => setNewPassword(event.target.value)}
+              reveal={revealPasswords}
+              showToggle={false}
+              required
+            />
+          </label>
+        </form>
+      </Dialog>
     </div>
   );
 }

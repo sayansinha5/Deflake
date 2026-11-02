@@ -10,7 +10,14 @@ from app.api.deps import CurrentSession, current_session, get_db, get_settings_d
 from app.config import Settings
 from app.db.models import RevokedSession, User, utcnow
 from app.errors import ApiError
-from app.schemas.auth import MeOut, PasswordChangeIn, RegisterIn, SignInIn, WorkspaceSummaryOut
+from app.schemas.auth import (
+    MeOut,
+    PasswordChangeIn,
+    ProfileUpdateIn,
+    RegisterIn,
+    SignInIn,
+    WorkspaceSummaryOut,
+)
 from app.security import audit
 from app.security.auth import COOKIE_NAME, COOKIE_PATH, cookie_kwargs, decode_token, issue_token
 from app.security.passwords import hash_password, password_problem, verify_password
@@ -157,6 +164,23 @@ async def me(
     db: AsyncSession = Depends(get_db),
 ) -> MeOut:
     return await _me(db, session.user, session.claims.expires_at)
+
+
+@router.patch("/me", response_model=MeOut)
+async def update_profile(
+    body: ProfileUpdateIn,
+    session: CurrentSession = Depends(current_session),
+    db: AsyncSession = Depends(get_db),
+) -> MeOut:
+    user = await db.get(User, session.user.id)
+    if user is None:
+        raise ApiError(404, "user_not_found", "Account not found.")
+    first = body.first_name.strip()
+    last = (body.last_name or "").strip()
+    user.full_name = f"{first} {last}".strip()
+    await db.commit()
+    await db.refresh(user)
+    return await _me(db, user, session.claims.expires_at)
 
 
 @router.post("/register", status_code=201, response_model=MeOut)

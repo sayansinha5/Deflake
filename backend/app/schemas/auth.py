@@ -31,6 +31,11 @@ class PasswordChangeIn(StrictModel):
     new_password: str = Field(min_length=1, max_length=256)
 
 
+class ProfileUpdateIn(StrictModel):
+    first_name: str = Field(min_length=1, max_length=60)
+    last_name: str = Field(default="", max_length=60)
+
+
 class WorkspaceSummaryOut(BaseModel):
     id: str
     name: str
