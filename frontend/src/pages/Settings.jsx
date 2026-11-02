@@ -30,10 +30,10 @@ const GITHUB_BANNER = {
 const STATUS = { configured: "Configured", missing: "Missing", disabled: "Disabled" };
 
 const MENUS = [
-  { id: "integration", label: "Integration", to: "/settings/integration" },
-  { id: "defaults", label: "Defaults", to: "/settings/defaults" },
   { id: "account", label: "Account", to: "/settings/account" },
+  { id: "defaults", label: "Defaults", to: "/settings/defaults" },
   { id: "members", label: "Members", to: "/settings/members" },
+  { id: "integration", label: "Integration", to: "/settings/integration" },
 ];
 
 export function Settings() {

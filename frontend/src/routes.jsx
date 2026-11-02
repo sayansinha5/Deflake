@@ -82,12 +82,12 @@ export function AppRoutes() {
         <Route path="/usage" element={<Usage />} />
         <Route path="/notifications" element={<Notifications />} />
         <Route path="/settings" element={<Settings />}>
-          <Route index element={<Navigate to="integration" replace />} />
-          <Route path="integration" element={<SettingsIntegration />} />
-          <Route path="defaults" element={<SettingsDefaults />} />
+          <Route index element={<Navigate to="account" replace />} />
           <Route path="account" element={<SettingsAccount />} />
+          <Route path="defaults" element={<SettingsDefaults />} />
           <Route path="members" element={<SettingsMembers />} />
           <Route path="members/:workspaceId" element={<SettingsMembers />} />
+          <Route path="integration" element={<SettingsIntegration />} />
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
