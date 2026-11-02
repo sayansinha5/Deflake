@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 
 import { PageHeader } from "../components/layout/PageHeader";
 import { Badge } from "../components/ui/Badge";
 import { SmartSideModal } from "../components/ui/SmartSideModal";
-import { EmptyState, ErrorState } from "../components/ui/States";
+import { ErrorState } from "../components/ui/States";
 import { SkeletonRows, Table } from "../components/ui/Table";
 import { Tooltip } from "../components/ui/Tooltip";
 import { useToast } from "../components/ui/Toast";
@@ -63,7 +64,24 @@ export function Escalations() {
       <PageHeader title="Escalations" />
       {error ? <ErrorState message={error.message} requestId={error.requestId} onRetry={load} /> : null}
       {!error && rows === null ? <SkeletonRows /> : null}
-      {!error && rows && rows.length === 0 ? <EmptyState>Nothing is waiting for a person.</EmptyState> : null}
+      {!error && rows && rows.length === 0 ? (
+        <div className="rounded-md border border-dashed border-border bg-gradient-to-b from-ice/50 to-surface px-6 py-10 text-center shadow-card">
+          <h2 className="mt-2 text-lg font-semibold text-ink">Nobody is waiting</h2>
+          <p className="mx-auto mt-8 max-w-xl text-body text-ink-secondary">
+            When a flake sits below the confidence, the auto pull request doesn't work.
+          </p>
+          <p className="mx-auto mt-2 max-w-xl text-body text-ink-secondary">
+            Deflake routes it to a person to decide or can be called as escalated for human review.
+          </p>
+          <p className="mt-8 text-body">
+            <Link to="/">Open overview</Link>
+            <span className="mx-2 text-ink-muted" aria-hidden>
+              ·
+            </span>
+            <Link to="/repositories">Browse repositories</Link>
+          </p>
+        </div>
+      ) : null}
       {!error && rows && rows.length > 0 ? (
         <Table
           columns={[

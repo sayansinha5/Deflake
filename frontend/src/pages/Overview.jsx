@@ -3,9 +3,8 @@ import { Link, useNavigate } from "react-router-dom";
 
 import { PageHeader } from "../components/layout/PageHeader";
 import { Badge } from "../components/ui/Badge";
-import { Button } from "../components/ui/Button";
 import { MetricTile } from "../components/ui/MetricTile";
-import { EmptyState, ErrorState } from "../components/ui/States";
+import { ErrorState } from "../components/ui/States";
 import { SkeletonRows, Table } from "../components/ui/Table";
 import { Tooltip } from "../components/ui/Tooltip";
 import { api, normalizeError } from "../lib/api";
@@ -57,9 +56,26 @@ export function useRuns(limit) {
   return { rows, error, load };
 }
 
+function ScansEmpty() {
+  return (
+    <div className="rounded-md border border-dashed border-border bg-gradient-to-b from-ice/50 to-surface px-6 py-10 text-center shadow-card">
+      <h2 className="mt-2 text-lg font-semibold text-ink">Nothing flaky to show yet</h2>
+      <p className="mx-auto mt-8 max-w-xl text-body text-ink-secondary">
+        Pick a repository, scan, and Deflake will surface unstable tests
+      </p>
+      <p className="mx-auto mt-2 max-w-md text-body text-ink-secondary">
+        Re-runs, confidence, and what to fix next
+      </p>
+      <p className="mt-8 text-body">
+        <Link to="/repositories">Browse repositories</Link>
+      </p>
+    </div>
+  );
+}
+
 export function RunTable({ rows, empty }) {
   const navigate = useNavigate();
-  if (!rows.length) return <EmptyState>{empty}</EmptyState>;
+  if (!rows.length) return empty ?? <ScansEmpty />;
   return (
     <Table
       columns={runColumns()}
@@ -101,7 +117,7 @@ export function Overview() {
         auto: flaky.filter((row) => row.routing === "auto_pr").length,
         escalate: flaky.filter((row) => row.routing === "escalate").length,
       });
-    }).catch(() => {});
+    }).catch(() => { });
     return () => {
       live = false;
     };
@@ -123,11 +139,15 @@ export function Overview() {
           <p className="mt-1 text-body text-ink-secondary">
             Open Repositories and scan an approved demo. The suite is rerun with a shuffled order and fresh seeds.
           </p>
-          <div className="mt-4 flex gap-2">
-            <Link to="/repositories" className="inline-flex h-10 items-center rounded-md bg-mint px-4 text-body font-medium text-ink hover:brightness-95">
-              Go to repositories
-            </Link>
-            <Button variant="secondary" onClick={dismissStart}>Dismiss</Button>
+          <div className="mt-4 flex items-center gap-4">
+            <Link to="/repositories">Go to repositories</Link>
+            <button
+              type="button"
+              onClick={dismissStart}
+              className="text-body text-ink-muted underline decoration-dashed decoration-gray-300 underline-offset-4 hover:text-ink-secondary"
+            >
+              Dismiss
+            </button>
           </div>
         </section>
       ) : null}
@@ -143,9 +163,7 @@ export function Overview() {
           <MetricTile label="Spend, 7 days" value={spend == null ? "—" : formatMoney(spend)} hint="Model calls" />
         </div>
       ) : null}
-      {!error && rows ? (
-        <RunTable rows={rows} empty="No scans yet. Start one from Repositories." />
-      ) : null}
+      {!error && rows && (rows.length > 0 || hideStart) ? <RunTable rows={rows} /> : null}
     </div>
   );
 }
@@ -157,9 +175,7 @@ export function Runs() {
       <PageHeader title="Runs" />
       {error ? <ErrorState message={error.message} requestId={error.requestId} onRetry={load} /> : null}
       {!error && rows === null ? <SkeletonRows /> : null}
-      {!error && rows ? (
-        <RunTable rows={rows} empty="No scans yet. Start one from Repositories." />
-      ) : null}
+      {!error && rows ? <RunTable rows={rows} /> : null}
     </div>
   );
 }
